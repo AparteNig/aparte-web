@@ -7,13 +7,41 @@ import { usePathname, useRouter } from "next/navigation";
 import Button from "@/components/general/Button";
 import { clearAuthCookie } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { IconType } from "@/utils/types";
-import { Logo, LogOutIcon, SideBarIcon } from "@/assets/icons";
+import {
+  Logo,
+  LogOutIcon,
+  SideBarIcon,
+  DashboardIcon,
+  HomeIcon,
+  NavigationIcon,
+  MessageCenterIocn,
+  WalletIcon,
+  UserIcon,
+  PackageIcon,
+  TickIcon,
+  NotificationIcon,
+  AccountIcon
+} from "@/assets/icons";
+
+const iconRegistry = {
+  dashboard: DashboardIcon,
+  listings: HomeIcon,
+  calendar: NavigationIcon,
+  messages: MessageCenterIocn,
+  payouts: WalletIcon,
+  users: UserIcon,
+  bookings: PackageIcon,
+  reviews: TickIcon,
+  alerts: NotificationIcon,
+  profile: AccountIcon
+} as const;
+
+type IconName = keyof typeof iconRegistry;
 
 export type NavItem = {
   label: string;
   href: string;
-  Icon?: IconType;
+  icon?: IconName;
 };
 
 type SidebarNavProps = {
@@ -54,7 +82,10 @@ export const SidebarNav = ({ items, logoutHref, cookieName }: SidebarNavProps) =
         </div>
         <nav className="space-y-1">
           {items.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const isSubPath = pathname.startsWith(`${item.href}/`);
+            const isExact = pathname === item.href;
+            const isActive = isExact || (item.href !== "/host/dashboard" && isSubPath);
+            const IconComponent = item.icon ? iconRegistry[item.icon] : undefined;
             return (
               <Link
                 key={item.href}
@@ -64,7 +95,7 @@ export const SidebarNav = ({ items, logoutHref, cookieName }: SidebarNavProps) =
                   isActive ? "bg-[#F5F5F7] text-primary" : "hover:bg-slate-100"
                 )}
               >
-                {item.Icon && <item.Icon color={isActive ? "#00AC35" : "#1F2937"} />}
+                {IconComponent && <IconComponent color={isActive ? "#00AC35" : "#1F2937"} />}
                 {!collapsed && <span>{item.label}</span>}
               </Link>
             );

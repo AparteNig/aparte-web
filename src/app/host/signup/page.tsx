@@ -1,39 +1,62 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SubmitHandler, useForm } from "react-hook-form";
+import { useMutation } from "@tanstack/react-query";
 
-import { EmailIcon, EyeIcon, EyeOffIcon, LockIcon, PhoneIcon, UserIcon } from "@/assets/icons";
+import { EmailIcon, EyeIcon, EyeOffIcon, LockIcon, PhoneIcon } from "@/assets/icons";
 import Button from "@/components/general/Button";
 import InputField from "@/components/general/form/InputField";
 import PageFooter from "@/components/general/PageFooter";
 import { AuthLayout } from "@/components/layouts/auth-layout";
 import { AuthHeader } from "@/components/pages/auth/auth-header";
-import { HOST_AUTH_COOKIE, setAuthCookie } from "@/lib/auth";
+import { registerHost } from "@/lib/api-client";
 
 type HostSignupFields = {
-  fullName: string;
   email: string;
   phone: string;
   password: string;
 };
 
 export default function HostSignupPage() {
-  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [status, setStatus] = useState<"form" | "success">("form");
+  const [error, setError] = useState<string | null>(null);
+  const [registeredEmail, setRegisteredEmail] = useState("");
+
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting }
+    formState: { errors },
   } = useForm<HostSignupFields>({
-    defaultValues: { fullName: "", email: "", phone: "", password: "" }
+    defaultValues: { email: "", phone: "", password: "" },
   });
 
-  const onSubmit: SubmitHandler<HostSignupFields> = () => {
-    setAuthCookie(HOST_AUTH_COOKIE, "host-dev-session");
-    router.push("/host/dashboard");
+  const signupMutation = useMutation({
+    mutationFn: (payload: HostSignupFields) =>
+      registerHost({
+        email: payload.email,
+        phone: payload.phone,
+        password: payload.password,
+      }),
+    onSuccess: (_data, variables) => {
+      setError(null);
+      setRegisteredEmail(variables.email);
+      setStatus("success");
+    },
+    onError: (mutationError: unknown) => {
+      setError(
+        mutationError instanceof Error
+          ? mutationError.message
+          : "Could not create account. Try again."
+      );
+    },
+  });
+
+  const onSubmit: SubmitHandler<HostSignupFields> = (values) => {
+    setError(null);
+    signupMutation.mutate(values);
   };
 
   return (
@@ -44,47 +67,74 @@ export default function HostSignupPage() {
         boldText="in under 5 minutes"
         subtitleEnd="and get ready to publish listings."
       />
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
-        <InputField
-          label="Full name"
-          placeholder="Chinaza Obi"
-          LeftIcon={UserIcon}
-          {...register("fullName", { required: "Name is required" })}
-          error={errors.fullName?.message}
-        />
-        <InputField
-          label="Email address"
-          placeholder="host@aparte.com"
-          LeftIcon={EmailIcon}
-          {...register("email", { required: "Email is required" })}
-          error={errors.email?.message}
-        />
-        <InputField
-          label="Phone number"
-          placeholder="+234..."
-          LeftIcon={PhoneIcon}
-          {...register("phone", { required: "Phone is required" })}
-          error={errors.phone?.message}
-        />
-        <InputField
-          label="Create password"
-          type={showPassword ? "text" : "password"}
-          placeholder="••••••••"
-          LeftIcon={LockIcon}
-          RightIcon={showPassword ? EyeOffIcon : EyeIcon}
-          rightIconAction={() => setShowPassword((prev) => !prev)}
-          {...register("password", { required: "Password is required" })}
-          error={errors.password?.message}
-        />
-        <Button
-          type="primary"
-          buttonType="submit"
-          className="w-full rounded-2xl text-base font-semibold"
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? "Creating account..." : "Start onboarding"}
-        </Button>
-      </form>
+      {status === "success" ? (
+        <div className="space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-sm text-emerald-800">
+          <p className="text-base font-semibold">
+            You’re registered! 🎉
+          </p>
+          <p>
+            We sent a confirmation message to <strong>{registeredEmail}</strong>
+            . Sign in to continue your onboarding checklist and add your first
+            listing.
+          </p>
+          <Button
+            type="primary"
+            className="w-full rounded-2xl text-base font-semibold"
+            onClick={() => (window.location.href = "/host/login")}
+          >
+            Proceed to login
+          </Button>
+        </div>
+      ) : (
+        <>
+          {error && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+          <p className="text-sm text-slate-600">
+            Start with your contact details. You can complete identity,
+            verification, and payout steps from your dashboard afterwards.
+          </p>
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            className="flex flex-col gap-5"
+          >
+            <InputField
+              label="Email address"
+              placeholder="host@aparte.com"
+              LeftIcon={EmailIcon}
+              {...register("email", { required: "Email is required" })}
+              error={errors.email?.message}
+            />
+            <InputField
+              label="Phone number"
+              placeholder="+234..."
+              LeftIcon={PhoneIcon}
+              {...register("phone", { required: "Phone is required" })}
+              error={errors.phone?.message}
+            />
+            <InputField
+              label="Create password"
+              type={showPassword ? "text" : "password"}
+              placeholder="••••••••"
+              LeftIcon={LockIcon}
+              RightIcon={showPassword ? EyeOffIcon : EyeIcon}
+              rightIconAction={() => setShowPassword((prev) => !prev)}
+              {...register("password", { required: "Password is required" })}
+              error={errors.password?.message}
+            />
+            <Button
+              type="primary"
+              buttonType="submit"
+              className="w-full rounded-2xl text-base font-semibold"
+              disabled={signupMutation.isPending}
+            >
+              {signupMutation.isPending ? "Creating account..." : "Start onboarding"}
+            </Button>
+          </form>
+        </>
+      )}
       <p className="text-center text-sm text-slate-600">
         Already live?{" "}
         <Link href="/host/login" className="font-semibold text-primary">
