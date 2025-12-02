@@ -1,6 +1,6 @@
-import { HOST_AUTH_COOKIE, getAuthCookie } from "@/lib/auth";
+import { HOST_AUTH_COOKIE, clearAuthCookie, getAuthCookie } from "@/lib/auth";
 import type { HostProfile } from "@/types/host";
-import type { HostListing } from "@/types/listing";
+import type { HostListing, HostListingDetail, ListingCalendarBlock } from "@/types/listing";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -36,6 +36,12 @@ export const apiFetch = async <T>(path: string, options: ApiFetchOptions = {}): 
   const payload = isJson ? await response.json() : await response.text();
 
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== "undefined") {
+      clearAuthCookie(HOST_AUTH_COOKIE);
+      if (!window.location.pathname.startsWith("/host/login")) {
+        window.location.href = "/host/login";
+      }
+    }
     const message =
       payload && typeof payload === "object" && "message" in payload
         ? (payload as { message: string }).message
@@ -116,6 +122,17 @@ export const uploadHostAvatar = (file: File) => {
   });
 };
 
+export const uploadListingAsset = (listingId: number, file: File) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("type", "listing");
+  formData.append("entityId", String(listingId));
+  return apiFetch<{ key: string; url: string }>("/uploads", {
+    method: "POST",
+    body: formData,
+  });
+};
+
 export const getHostListings = () =>
   apiFetch<{ listings: HostListing[] }>("/hosts/listings", {
     method: "GET",
@@ -125,6 +142,20 @@ export const createHostListing = (formData: FormData) =>
   apiFetch<{ listing: HostListing }>("/hosts/listings", {
     method: "POST",
     body: formData,
+  });
+
+export const getHostListing = (listingId: number) =>
+  apiFetch<{ listing: HostListingDetail }>(`/hosts/listings/${listingId}`, {
+    method: "GET",
+  });
+
+export const updateHostListing = (
+  listingId: number,
+  payload: Partial<Pick<HostListing, "title" | "summary" | "description" | "addressLine1" | "addressLine2" | "city" | "state" | "country" | "postalCode" | "nightlyPrice" | "cleaningFee" | "serviceFee" | "maxGuests" | "bedrooms" | "bathrooms" | "amenities" | "houseRules" | "minNights" | "maxNights">>,
+) =>
+  apiFetch<{ listing: HostListing }>(`/hosts/listings/${listingId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
   });
 
 export const publishHostListing = (listingId: number) =>
@@ -137,13 +168,27 @@ export const draftHostListing = (listingId: number) =>
     method: "POST",
   });
 
-export type ListingCalendarBlock = {
-  id: number;
-  listingId: number;
-  startDate: string;
-  endDate: string;
-  reason: string;
+export const deleteHostListing = (listingId: number) =>
+  apiFetch<void>(`/hosts/listings/${listingId}`, {
+    method: "DELETE",
+  });
+
+export type ListingPhotoPayload = {
+  key: string;
+  caption?: string;
+  sortOrder?: number;
 };
+
+export const addListingPhotos = (listingId: number, photos: ListingPhotoPayload[]) =>
+  apiFetch<{ listing: HostListing }>(`/hosts/listings/${listingId}/photos`, {
+    method: "POST",
+    body: JSON.stringify({ photos }),
+  });
+
+export const deleteListingPhoto = (listingId: number, photoId: number) =>
+  apiFetch<{ listing: HostListing }>(`/hosts/listings/${listingId}/photos/${photoId}`, {
+    method: "DELETE",
+  });
 
 export const getListingCalendar = (listingId: number, month?: string) =>
   apiFetch<{ blocks: ListingCalendarBlock[] }>(

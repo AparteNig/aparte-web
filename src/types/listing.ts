@@ -11,6 +11,20 @@ export type ListingPhoto = {
   createdAt: string;
 };
 
+export type ListingPhotoPayload = {
+  key: string;
+  caption?: string;
+  sortOrder?: number;
+};
+
+export type ListingCalendarBlock = {
+  id: number;
+  listingId: number;
+  startDate: string;
+  endDate: string;
+  reason: string;
+};
+
 export type HostListing = {
   id: number;
   hostId: number;
@@ -42,6 +56,10 @@ export type HostListing = {
   createdAt: string;
   updatedAt: string;
   photos: ListingPhoto[];
+};
+
+export type HostListingDetail = HostListing & {
+  calendarBlocks?: ListingCalendarBlock[];
 };
 
 export type HostProfileWithStatus = {

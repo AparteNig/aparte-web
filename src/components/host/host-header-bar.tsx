@@ -119,7 +119,7 @@ export const HostHeaderBar = ({ profile, className }: HostHeaderBarProps) => {
           className="relative h-11 w-11 overflow-hidden rounded-full bg-slate-100"
           aria-label="Go to profile"
         >
-          <div className="h-full w-full">
+          <div className="relative h-full w-full">
             {profile?.avatarUrl ? (
               <Image
                 src={profile.avatarUrl}

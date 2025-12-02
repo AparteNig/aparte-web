@@ -21,9 +21,9 @@ const PROFILE_SECTIONS: HostSectionConfig[] = [
     description: "Share who you are so guests can trust your brand.",
     stepKey: "PROFILE_INFO",
     fields: [
-      { name: "fullName", label: "Legal full name" },
-      { name: "displayName", label: "Display name" },
-      { name: "phone", label: "Phone number", type: "tel" },
+      { name: "fullName", label: "Legal full name", required: true },
+      { name: "displayName", label: "Display name", required: true },
+      { name: "phone", label: "Phone number", type: "tel", required: true },
       {
         name: "bio",
         label: "About you",
@@ -40,11 +40,11 @@ const PROFILE_SECTIONS: HostSectionConfig[] = [
     description: "Confirm the address you operate from.",
     stepKey: "ADDRESS_VERIFIED",
     fields: [
-      { name: "addressLine1", label: "Address line 1" },
+      { name: "addressLine1", label: "Address line 1", required: true },
       { name: "addressLine2", label: "Address line 2 (optional)" },
-      { name: "city", label: "City" },
+      { name: "city", label: "City", required: true },
       { name: "state", label: "State / Region" },
-      { name: "country", label: "Country" },
+      { name: "country", label: "Country", required: true },
       { name: "postalCode", label: "Postal code" },
     ],
   },
@@ -57,18 +57,20 @@ const PROFILE_SECTIONS: HostSectionConfig[] = [
       "Provide government ID details to complete compliance checks.",
     stepKey: "IDENTITY_UPLOAD",
     fields: [
-      { name: "idType", label: "ID type (e.g. National ID, Driver’s License)" },
-      { name: "idNumber", label: "ID number" },
+      { name: "idType", label: "ID type (e.g. National ID, Driver’s License)", required: true },
+      { name: "idNumber", label: "ID number", required: true },
       {
         name: "idDocumentKey",
         label: "ID document storage key",
         helperText:
           "Upload via /uploads (type=profile) and paste the returned key.",
+        required: true,
       },
       {
         name: "selfieDocumentKey",
         label: "Selfie verification key",
         helperText: "Upload a selfie holding your ID and paste the key.",
+        required: true,
       },
     ],
   },
@@ -96,10 +98,10 @@ const PROFILE_SECTIONS: HostSectionConfig[] = [
     description: "Where Paystack should deposit your payouts.",
     stepKey: "PAYOUT_DETAILS",
     fields: [
-      { name: "payoutBankName", label: "Bank name" },
-      { name: "payoutBankCode", label: "Bank code" },
-      { name: "payoutAccountName", label: "Account name" },
-      { name: "payoutAccountNumber", label: "Account number" },
+      { name: "payoutBankName", label: "Bank name", required: true },
+      { name: "payoutBankCode", label: "Bank code", required: true },
+      { name: "payoutAccountName", label: "Account name", required: true },
+      { name: "payoutAccountNumber", label: "Account number", required: true },
       {
         name: "payoutRoutingNumber",
         label: "Routing/reference (optional)",

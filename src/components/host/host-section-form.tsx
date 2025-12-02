@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Button from "@/components/general/Button";
@@ -39,6 +39,7 @@ type SectionFormValues = Record<string, string>;
 
 export const HostSectionForm = ({ config, profile }: HostSectionFormProps) => {
   const { mutateAsync, isPending } = useUpdateHostProfileMutation();
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const defaultValues = useMemo(() => {
     const values: SectionFormValues = {};
@@ -68,7 +69,28 @@ export const HostSectionForm = ({ config, profile }: HostSectionFormProps) => {
     reset(defaultValues);
   }, [defaultValues, reset]);
 
+  const validateSection = (values: SectionFormValues) => {
+    if (config.id === "business") {
+      if (!values.businessName && !values.taxId) {
+        return "Provide at least a business name or tax ID.";
+      }
+    }
+    if (config.id === "support") {
+      if (!values.supportEmail && !values.supportPhone) {
+        return "Provide a support email or phone number.";
+      }
+    }
+    return null;
+  };
+
   const onSubmit = async (values: SectionFormValues) => {
+    setSubmitError(null);
+    const sectionError = validateSection(values);
+    if (sectionError) {
+      setSubmitError(sectionError);
+      return;
+    }
+
     const normalized = Object.fromEntries(
       Object.entries(values).map(([key, value]) => {
         if (key === "languages") {
@@ -130,7 +152,8 @@ export const HostSectionForm = ({ config, profile }: HostSectionFormProps) => {
                     className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     placeholder={field.placeholder}
                     rows={4}
-                    {...register(field.name as string)}
+                    required={field.required}
+                    {...register(field.name as string, { required: field.required })}
                   />
                   {field.helperText && (
                     <p className="text-xs text-slate-500">
@@ -147,7 +170,8 @@ export const HostSectionForm = ({ config, profile }: HostSectionFormProps) => {
                 <Input
                   type={field.type ?? "text"}
                   placeholder={field.placeholder}
-                  {...register(field.name as string)}
+                  required={field.required}
+                  {...register(field.name as string, { required: field.required })}
                 />
                 {field.helperText && (
                   <p className="text-xs text-slate-500">{field.helperText}</p>
@@ -155,6 +179,11 @@ export const HostSectionForm = ({ config, profile }: HostSectionFormProps) => {
               </label>
             );
           })}
+          {submitError && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+              {submitError}
+            </div>
+          )}
           <Button
             type="primary"
             buttonType="submit"

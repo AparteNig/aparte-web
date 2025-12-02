@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import Button from "@/components/general/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useHostListingsQuery } from "@/hooks/use-host-listings";
+import { hostListingQueryKey, useHostListingsQuery } from "@/hooks/use-host-listings";
 import {
   useAddBlackoutMutation,
   useDeleteBlackoutMutation,
@@ -23,6 +24,7 @@ const isDateBetween = (date: string, start: string, end: string) => {
 export default function HostCalendarPage() {
   const listingsQuery = useHostListingsQuery();
   const listings = listingsQuery.data ?? [];
+  const queryClient = useQueryClient();
   const [selectedListingId, setSelectedListingId] = useState<number | undefined>(undefined);
   const [month, setMonth] = useState<string>(() => {
     const now = new Date();
@@ -36,8 +38,17 @@ export default function HostCalendarPage() {
   }, [listings, selectedListingId]);
 
   const { data: blocks = [], isLoading } = useListingCalendarQuery(selectedListingId, month);
-  const addBlock = useAddBlackoutMutation(selectedListingId, month);
-  const deleteBlock = useDeleteBlackoutMutation(selectedListingId, month);
+  const invalidateListingDetail = () => {
+    if (selectedListingId) {
+      queryClient.invalidateQueries({ queryKey: hostListingQueryKey(selectedListingId) });
+    }
+  };
+  const addBlock = useAddBlackoutMutation(selectedListingId, month, {
+    onSuccess: invalidateListingDetail,
+  });
+  const deleteBlock = useDeleteBlackoutMutation(selectedListingId, month, {
+    onSuccess: invalidateListingDetail,
+  });
 
   const selectedListing = useMemo(
     () => listings.find((listing) => listing.id === selectedListingId),
@@ -223,35 +234,37 @@ export default function HostCalendarPage() {
                     type="primary"
                     className="rounded-2xl"
                     disabled={confirming}
-                    onClick={async () => {
-                      if (!selectedListingId || !pendingRange) return;
-                      const tempId = -Date.now();
-                      setConfirming(true);
-                      setTempBlocks((prev) => [
-                        ...prev,
-                        {
-                          id: tempId,
-                          listingId: selectedListingId,
-                          startDate: pendingRange.start,
-                          endDate: pendingRange.end,
-                          reason: pendingRange.reason ?? "",
-                        },
-                      ]);
-                      setPendingRange(null);
-                      setSelectionStart(null);
-                      setSelectionEnd(null);
-                      try {
-                        await addBlock.mutateAsync({
-                          startDate: pendingRange.start,
-                          endDate: pendingRange.end,
-                          reason: pendingRange.reason,
-                        });
-                      } catch {
-                        setTempBlocks((prev) => prev.filter((block) => block.id !== tempId));
-                      } finally {
-                        setConfirming(false);
-                      }
-                    }}
+                  onClick={async () => {
+                    if (!selectedListingId || !pendingRange) return;
+                    const tempId = -Date.now();
+                    const { start, end, reason } = pendingRange;
+                    setConfirming(true);
+                    setTempBlocks((prev) => [
+                      ...prev,
+                      {
+                        id: tempId,
+                        listingId: selectedListingId,
+                        startDate: start,
+                        endDate: end,
+                        reason: reason ?? "",
+                      },
+                    ]);
+                    setPendingRange(null);
+                    setSelectionStart(null);
+                    setSelectionEnd(null);
+                    try {
+                      await addBlock.mutateAsync({
+                        startDate: start,
+                        endDate: end,
+                        reason,
+                      });
+                    } finally {
+                      setTempBlocks((prev) =>
+                        prev.filter((block) => !(block.id === tempId && block.listingId === selectedListingId)),
+                      );
+                      setConfirming(false);
+                    }
+                  }}
                   >
                     {confirming ? (
                       <span className="flex items-center gap-2">

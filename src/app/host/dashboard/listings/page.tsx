@@ -1,14 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 
 import { Input } from "@/components/ui/input";
 import Button from "@/components/general/Button";
+import LoadingOverlay from "@/components/general/LoadingOverlay";
+import Modal from "@/components/general/ui/modal/Modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useHostProfileQuery } from "@/hooks/use-host-profile";
 import {
   useCreateListingMutation,
+  useDeleteListingMutation,
   useHostListingsQuery,
   useMoveListingToDraftMutation,
   usePublishListingMutation,
@@ -60,16 +64,20 @@ const statusBadge = (status: HostListing["status"]) => {
 };
 
 export default function HostListingsPage() {
+  const router = useRouter();
   const { data: profile } = useHostProfileQuery();
   const listingsQuery = useHostListingsQuery();
   const createListing = useCreateListingMutation();
   const publishListing = usePublishListingMutation();
   const draftListing = useMoveListingToDraftMutation();
+  const deleteListing = useDeleteListingMutation();
 
   const { register, handleSubmit, reset } = useForm<ListingFormValues>({
     defaultValues: initialFormValues,
   });
   const [attachments, setAttachments] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [listingToDelete, setListingToDelete] = useState<{ id: number; title: string } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   const canPublish = Boolean(
@@ -101,7 +109,11 @@ export default function HostListingsPage() {
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files ? Array.from(event.target.files) : [];
-    setAttachments(files);
+    if (files.length === 0) return;
+    setAttachments((prev) => [...prev, ...files]);
+    if (event.target) {
+      event.target.value = "";
+    }
   };
 
   const listings = listingsQuery.data ?? [];
@@ -126,6 +138,17 @@ export default function HostListingsPage() {
 
   return (
     <div className="space-y-8">
+      <LoadingOverlay
+        isOpen={publishListing.isPending || draftListing.isPending}
+        title={
+          publishListing.isPending
+            ? "Publishing listing…"
+            : draftListing.isPending
+            ? "Moving listing to draft…"
+            : "Working…"
+        }
+        message="Hold on while we update your listing."
+      />
       <section className="space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -222,19 +245,37 @@ export default function HostListingsPage() {
                   <span className="font-semibold text-slate-800">House rules (comma separated)</span>
                   <Input placeholder="No smoking, Quiet hours after 10pm" {...register("houseRules")} />
                 </label>
-                <label className="space-y-2 text-sm md:col-span-2">
-                  <span className="font-semibold text-slate-800">Photos / videos</span>
+                <div className="space-y-3 text-sm md:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-800">Photos / videos</span>
+                    <button
+                      type="button"
+                      className="text-sm font-semibold text-primary underline-offset-4 hover:underline"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      Add media
+                    </button>
+                  </div>
                   <input
+                    ref={fileInputRef}
                     type="file"
                     multiple
                     accept="image/*,video/*"
                     onChange={handleFileChange}
-                    className="w-full rounded-2xl border border-dashed border-slate-300 p-3 text-sm"
+                    className="hidden"
                   />
-                  {attachments.length > 0 && (
-                    <p className="text-xs text-slate-500">{attachments.length} file(s) selected</p>
-                  )}
-                </label>
+                  <div className="rounded-2xl border border-dashed border-slate-300 p-3 text-sm text-slate-600">
+                    {attachments.length === 0 ? (
+                      <p>No media selected yet. Add photos or short clips to showcase the space.</p>
+                    ) : (
+                      <ul className="space-y-1 text-xs text-slate-500">
+                        {attachments.map((file, index) => (
+                          <li key={`${file.name}-${index}`}>{file.name}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
                 <div className="md:col-span-2">
                   <Button
                     type="primary"
@@ -262,9 +303,13 @@ export default function HostListingsPage() {
         ) : (
           <div className="grid gap-4">
             {filteredListings.map((listing) => (
-              <Card key={listing.id} className="border-slate-200">
+              <Card
+                key={listing.id}
+                className="cursor-pointer border-slate-200 transition hover:border-primary/40"
+                onClick={() => router.push(`/host/dashboard/listings/${listing.id}`)}
+              >
                 <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <div>
+                  <div className="flex flex-col gap-1">
                     <CardTitle>{listing.title}</CardTitle>
                     <p className="text-sm text-slate-500">
                       {listing.city}, {listing.country} · ₦{listing.nightlyPrice.toLocaleString()}
@@ -306,7 +351,10 @@ export default function HostListingsPage() {
                         !canPublish ||
                         publishListing.isPending
                       }
-                      onClick={() => publishListing.mutate(listing.id)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        publishListing.mutate(listing.id);
+                      }}
                     >
                       Publish
                     </Button>
@@ -314,9 +362,23 @@ export default function HostListingsPage() {
                       type="secondary"
                       className="rounded-2xl"
                       disabled={listing.status === "draft" || draftListing.isPending}
-                      onClick={() => draftListing.mutate(listing.id)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        draftListing.mutate(listing.id);
+                      }}
                     >
                       Move to draft
+                    </Button>
+                    <Button
+                      type="transparent"
+                      className="ml-auto text-rose-600 hover:text-rose-700"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setListingToDelete({ id: listing.id, title: listing.title });
+                      }}
+                      disabled={deleteListing.isPending}
+                    >
+                      Delete
                     </Button>
                   </div>
                   {!canPublish && (
@@ -330,6 +392,57 @@ export default function HostListingsPage() {
           </div>
         )}
       </section>
+      <Modal
+        opened={Boolean(listingToDelete)}
+        onClose={() => {
+          if (!deleteListing.isPending) {
+            setListingToDelete(null);
+          }
+        }}
+        className="max-w-lg"
+      >
+        <div className="space-y-4 text-slate-800">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-rose-600">Delete listing</p>
+            <h3 className="text-xl font-semibold text-slate-900">Are you sure?</h3>
+            <p className="text-sm text-slate-500">
+              This will permanently remove <strong>{listingToDelete?.title}</strong> including all drafts and media.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 md:flex-row md:justify-end">
+            <Button
+              type="secondary"
+              className="w-full rounded-2xl md:w-auto"
+              onClick={() => setListingToDelete(null)}
+              disabled={deleteListing.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="primary"
+              className="w-full rounded-2xl bg-rose-600 text-white hover:bg-rose-700 md:w-auto"
+              disabled={deleteListing.isPending || !listingToDelete}
+              onClick={async () => {
+                if (!listingToDelete) return;
+                try {
+                  await deleteListing.mutateAsync(listingToDelete.id);
+                } finally {
+                  setListingToDelete(null);
+                }
+              }}
+            >
+              {deleteListing.isPending ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  Deleting…
+                </span>
+              ) : (
+                "Delete listing"
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

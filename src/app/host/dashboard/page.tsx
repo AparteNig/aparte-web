@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useHostProfileQuery } from "@/hooks/use-host-profile";
 import { useHostListingsQuery } from "@/hooks/use-host-listings";
 import { HOST_ONBOARDING_STEPS } from "@/types/host";
+import type { HostOnboardingStatus } from "@/types/host";
 
 const quickActions = [
   {
@@ -75,6 +76,25 @@ export default function HostDashboardPage() {
       </div>
     );
   }
+  console.log(data.incompleteSteps);
+  const formatStatus = (status: HostOnboardingStatus) => {
+    if (status === "identity_pending") {
+      if (
+        data.incompleteSteps.length === 1 &&
+        !data.completedSteps.includes("LISTING_PUBLISHED")
+      ) {
+        return "Publish your first listing";
+      }
+      return "Verification pending";
+    }
+    if (status === "draft") {
+      const hasListing = data.completedSteps.includes("LISTING_PUBLISHED");
+      const allStepsComplete = data.incompleteSteps.length === 0;
+      if (!hasListing && allStepsComplete) return "Create your first listing";
+      return hasListing ? "Listing draft" : "Create your first listing";
+    }
+    return status.replace("_", " ");
+  };
 
   const totalSteps = HOST_ONBOARDING_STEPS.length;
   const completedSteps = data.completedSteps.length;
@@ -91,8 +111,8 @@ export default function HostDashboardPage() {
       {needsSetup && (
         <div className="flex flex-col gap-3 rounded-3xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900 md:flex-row md:items-center md:justify-between">
           <div>
-            Account setup in progress. Complete every onboarding step to unlock
-            payouts and publishing.
+            Account setup in progress. Complete every onboarding step to unlock payouts
+            and publishing.
           </div>
           <Link
             href="/host/dashboard/profile"
@@ -138,12 +158,8 @@ export default function HostDashboardPage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div>
-                  <p className="text-xs uppercase text-slate-500">
-                    Revenue generated
-                  </p>
-                  <p className="text-2xl font-semibold text-slate-900">
-                    ₦0
-                  </p>
+                  <p className="text-xs uppercase text-slate-500">Revenue generated</p>
+                  <p className="text-2xl font-semibold text-slate-900">₦0</p>
                 </div>
                 <p className="text-sm text-slate-600">
                   Completed bookings: <span className="font-semibold">0</span>
@@ -159,9 +175,7 @@ export default function HostDashboardPage() {
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-slate-600">
                 <div className="rounded-2xl bg-slate-50 p-3">
-                  <p className="text-xs uppercase text-slate-500">
-                    Payout status
-                  </p>
+                  <p className="text-xs uppercase text-slate-500">Payout status</p>
                   <p className="text-base font-semibold text-slate-900">
                     {data.payoutStatus ?? "pending"}
                   </p>
@@ -171,9 +185,7 @@ export default function HostDashboardPage() {
                   </p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 p-3">
-                  <p className="text-xs uppercase text-slate-500">
-                    Support inbox
-                  </p>
+                  <p className="text-xs uppercase text-slate-500">Support inbox</p>
                   <p className="text-base font-semibold text-slate-900">
                     {data.supportEmail || "Add support email"}
                   </p>
@@ -199,12 +211,8 @@ export default function HostDashboardPage() {
                     className="flex items-start justify-between rounded-2xl border border-slate-200 p-3"
                   >
                     <div>
-                      <p className="font-semibold text-slate-900">
-                        {action.title}
-                      </p>
-                      <p className="text-sm text-slate-500">
-                        {action.description}
-                      </p>
+                      <p className="font-semibold text-slate-900">{action.title}</p>
+                      <p className="text-sm text-slate-500">{action.description}</p>
                     </div>
                     <Link
                       href={action.href}
@@ -224,13 +232,9 @@ export default function HostDashboardPage() {
                 </p>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-slate-600">
-                <p>
-                  Keep response time under 1 hour to boost booking conversions.
-                </p>
+                <p>Keep response time under 1 hour to boost booking conversions.</p>
                 <p>Schedule post-stay cleaning reminders every Friday.</p>
-                <p>
-                  Offer weekly discounts to improve mid-week occupancy.
-                </p>
+                <p>Offer weekly discounts to improve mid-week occupancy.</p>
               </CardContent>
             </Card>
           </section>
@@ -252,12 +256,12 @@ export default function HostDashboardPage() {
                 <p className="text-sm text-slate-600">
                   Status:{" "}
                   <span className="font-semibold">
-                    {data.onboardingStatus.replace("_", " ")}
+                    {formatStatus(data.onboardingStatus)}
                   </span>
                 </p>
                 <p className="text-xs text-slate-500">
-                  {totalSteps - completedSteps} steps remaining. Finish setup to
-                  unlock payouts.
+                  {totalSteps - completedSteps} steps remaining. Finish setup to unlock
+                  payouts.
                 </p>
                 <Button
                   type="secondary"
@@ -279,9 +283,7 @@ export default function HostDashboardPage() {
                 {listingStats.map((stat) => (
                   <div key={stat.label}>
                     <p className="text-sm text-slate-500">{stat.label}</p>
-                    <p className="text-2xl font-semibold text-slate-900">
-                      {stat.value}
-                    </p>
+                    <p className="text-2xl font-semibold text-slate-900">{stat.value}</p>
                     <p className="text-xs text-slate-500">{stat.helper}</p>
                   </div>
                 ))}
@@ -293,9 +295,7 @@ export default function HostDashboardPage() {
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-slate-600">
                 <div className="rounded-2xl bg-slate-50 p-3">
-                  <p className="text-xs uppercase text-slate-500">
-                    Payout status
-                  </p>
+                  <p className="text-xs uppercase text-slate-500">Payout status</p>
                   <p className="text-base font-semibold text-slate-900">
                     {data.payoutStatus ?? "pending"}
                   </p>
@@ -305,9 +305,7 @@ export default function HostDashboardPage() {
                   </p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 p-3">
-                  <p className="text-xs uppercase text-slate-500">
-                    Support inbox
-                  </p>
+                  <p className="text-xs uppercase text-slate-500">Support inbox</p>
                   <p className="text-base font-semibold text-slate-900">
                     {data.supportEmail || "Add support email"}
                   </p>
@@ -323,8 +321,8 @@ export default function HostDashboardPage() {
               <CardHeader>
                 <CardTitle>Next steps</CardTitle>
                 <p className="text-sm text-slate-500">
-                  Focus on the most important tasks to unlock payouts and
-                  listing approvals.
+                  Focus on the most important tasks to unlock payouts and listing
+                  approvals.
                 </p>
               </CardHeader>
               <CardContent>
@@ -365,12 +363,8 @@ export default function HostDashboardPage() {
                     className="flex items-start justify-between rounded-2xl border border-slate-200 p-3"
                   >
                     <div>
-                      <p className="font-semibold text-slate-900">
-                        {action.title}
-                      </p>
-                      <p className="text-sm text-slate-500">
-                        {action.description}
-                      </p>
+                      <p className="font-semibold text-slate-900">{action.title}</p>
+                      <p className="text-sm text-slate-500">{action.description}</p>
                     </div>
                     <Link
                       href={action.href}

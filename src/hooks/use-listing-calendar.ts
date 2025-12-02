@@ -1,12 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  addListingBlackout,
-  deleteListingBlackout,
-  getListingCalendar,
-  ListingCalendarBlock,
-} from "@/lib/api-client";
+import { addListingBlackout, deleteListingBlackout, getListingCalendar } from "@/lib/api-client";
+import type { ListingCalendarBlock } from "@/types/listing";
 
 export const listingCalendarKey = (listingId: number, month?: string) => [
   "listingCalendar",
@@ -14,9 +10,10 @@ export const listingCalendarKey = (listingId: number, month?: string) => [
   month ?? "current",
 ];
 
-export const useListingCalendarQuery = (listingId?: number, month?: string) =>
-  useQuery<ListingCalendarBlock[]>({
-    queryKey: listingId ? listingCalendarKey(listingId, month) : undefined,
+export const useListingCalendarQuery = (listingId?: number, month?: string) => {
+  const queryKey = listingId ? listingCalendarKey(listingId, month) : undefined;
+  return useQuery<ListingCalendarBlock[]>({
+    queryKey,
     queryFn: async () => {
       if (!listingId) return [];
       const data = await getListingCalendar(listingId, month);
@@ -24,8 +21,13 @@ export const useListingCalendarQuery = (listingId?: number, month?: string) =>
     },
     enabled: Boolean(listingId),
   });
+};
 
-export const useAddBlackoutMutation = (listingId?: number, month?: string) => {
+export const useAddBlackoutMutation = (
+  listingId?: number,
+  month?: string,
+  options?: { onSuccess?: () => void; onError?: () => void },
+) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: { startDate: string; endDate: string; reason?: string }) => {
@@ -38,11 +40,19 @@ export const useAddBlackoutMutation = (listingId?: number, month?: string) => {
       if (listingId) {
         queryClient.invalidateQueries({ queryKey: listingCalendarKey(listingId, month) });
       }
+      options?.onSuccess?.();
+    },
+    onError: () => {
+      options?.onError?.();
     },
   });
 };
 
-export const useDeleteBlackoutMutation = (listingId?: number, month?: string) => {
+export const useDeleteBlackoutMutation = (
+  listingId?: number,
+  month?: string,
+  options?: { onSuccess?: () => void; onError?: () => void },
+) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (blockId: number) => {
@@ -55,6 +65,10 @@ export const useDeleteBlackoutMutation = (listingId?: number, month?: string) =>
       if (listingId) {
         queryClient.invalidateQueries({ queryKey: listingCalendarKey(listingId, month) });
       }
+      options?.onSuccess?.();
+    },
+    onError: () => {
+      options?.onError?.();
     },
   });
 };

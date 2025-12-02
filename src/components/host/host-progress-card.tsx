@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { HostOnboardingStep, HostProfile } from "@/types/host";
+import type { HostOnboardingStep, HostProfile, HostOnboardingStatus } from "@/types/host";
 import { cn } from "@/lib/utils";
 
 const STEP_METADATA: Record<
@@ -57,6 +57,23 @@ const ORDERED_STEPS: HostOnboardingStep[] = [
   "LISTING_PUBLISHED",
 ];
 
+const formatStatus = (
+  status: HostOnboardingStatus,
+  hasListing: boolean,
+  allStepsComplete: boolean,
+) => {
+  if (status === "identity_pending") {
+    if (allStepsComplete && !hasListing) {
+      return "Publish your first listing";
+    }
+    return "Verification pending";
+  }
+  if (!hasListing && allStepsComplete) return "Create your first listing";
+  if (status === "draft")
+    return hasListing ? "Listing draft" : "Create your first listing";
+  return status.replace("_", " ");
+};
+
 type HostProgressCardProps = {
   profile: HostProfile;
 };
@@ -67,6 +84,8 @@ export const HostProgressCard = ({ profile }: HostProgressCardProps) => {
   const totalSteps = ORDERED_STEPS.length;
   const completedCount = profile.completedSteps.length;
   const percent = Math.round((completedCount / totalSteps) * 100);
+  const hasListing = profile.completedSteps.includes("LISTING_PUBLISHED");
+  const allStepsComplete = completedCount === totalSteps - 1;
 
   return (
     <Card className="border-slate-200">
@@ -79,7 +98,7 @@ export const HostProgressCard = ({ profile }: HostProgressCardProps) => {
           <p>
             {completedCount}/{totalSteps} steps complete · Status:{" "}
             <span className="font-semibold text-slate-900">
-              {profile.onboardingStatus.replace("_", " ")}
+              {formatStatus(profile.onboardingStatus, hasListing, allStepsComplete)}
             </span>
           </p>
           <div className="h-2 w-full rounded-full bg-slate-200">
@@ -129,10 +148,8 @@ export const HostProgressCard = ({ profile }: HostProgressCardProps) => {
                         router.push(meta.target);
                         if (typeof window !== "undefined") {
                           try {
-                            const hash = new URL(
-                              meta.target,
-                              window.location.origin,
-                            ).hash;
+                            const hash = new URL(meta.target, window.location.origin)
+                              .hash;
                             if (hash) {
                               window.location.hash = hash;
                             }
@@ -143,7 +160,7 @@ export const HostProgressCard = ({ profile }: HostProgressCardProps) => {
                         setExpanded(false);
                       }
                     }}
-                >
+                  >
                     <div>
                       <p className="font-semibold">{meta.label}</p>
                       <p className="text-xs text-slate-500">{meta.description}</p>
