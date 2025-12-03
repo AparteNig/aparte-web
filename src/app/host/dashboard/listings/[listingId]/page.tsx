@@ -91,7 +91,6 @@ export default function HostListingDetailPage() {
   const draftListing = useMoveListingToDraftMutation();
   const attachPhotos = useAttachListingPhotosMutation(listingId);
   const deletePhotoMutation = useDeleteListingPhotoMutation(listingId);
-
   const [showEditForm, setShowEditForm] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -108,6 +107,20 @@ export default function HostListingDetailPage() {
     reset,
     formState: { isDirty, isSubmitting },
   } = useForm<ListingEditFormValues>({ defaultValues: emptyListingForm });
+
+  const overlayTitle = publishListing.isPending
+    ? "Publishing listing…"
+    : draftListing.isPending
+    ? "Moving listing to draft…"
+    : "Updating listing…";
+
+  const overlayActive =
+    isSubmitting ||
+    updateListing.isPending ||
+    deletePhotoMutation.isPending ||
+    attachPhotos.isPending ||
+    publishListing.isPending ||
+    draftListing.isPending;
 
   const mediaItems = useMemo(
     () =>
@@ -385,13 +398,8 @@ export default function HostListingDetailPage() {
   return (
     <div className="space-y-6">
       <LoadingOverlay
-        isOpen={
-          isSubmitting ||
-          updateListing.isPending ||
-          deletePhotoMutation.isPending ||
-          attachPhotos.isPending
-        }
-        title="Updating listing…"
+        isOpen={overlayActive}
+        title={overlayTitle}
         message="Hold on while we save your latest changes."
       />
       <MediaGalleryModal
@@ -563,8 +571,8 @@ export default function HostListingDetailPage() {
                   Update fees anytime to reflect operational costs. Guests will see the total before booking.
                 </p>
               </CardContent>
-            </Card>
-          </section>
+        </Card>
+      </section>
 
           <section className="grid gap-4 md:grid-cols-2">
             <Card className="border-slate-200">

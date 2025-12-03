@@ -39,6 +39,7 @@ import IconParkIcon from "./IconParkIcon";
 import FundTransferIcon from "./FundTransferIcon";
 import FundBankIcon from "./FundBankIcon";
 import DollarIcon from "./DollarIcon";
+import CalendarIcon from "./CalendarIcon";
 export {
   DollarIcon,
   IconParkIcon,
@@ -81,4 +82,5 @@ export {
   HomeIcon,
   TickIcon,
   PackageIcon,
+  CalendarIcon,
 };

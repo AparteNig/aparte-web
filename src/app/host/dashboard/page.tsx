@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 
 import Button from "@/components/general/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useHostProfileQuery } from "@/hooks/use-host-profile";
 import { useHostListingsQuery } from "@/hooks/use-host-listings";
+import { useHostBookingsQuery } from "@/hooks/use-bookings";
 import { HOST_ONBOARDING_STEPS } from "@/types/host";
 import type { HostOnboardingStatus } from "@/types/host";
 
@@ -25,6 +27,11 @@ const quickActions = [
     title: "Respond to guests",
     description: "Keep response times high and delight new inquiries.",
     href: "/host/dashboard/messages",
+  },
+  {
+    title: "Test booking flow",
+    description: "Open the simulator to create demo bookings and advance statuses.",
+    href: "/test-booking",
   },
 ];
 
@@ -50,6 +57,7 @@ export default function HostDashboardPage() {
   const router = useRouter();
   const { data, isLoading, isError, error, refetch } = useHostProfileQuery();
   const { data: listingsData } = useHostListingsQuery();
+  const bookingsQuery = useHostBookingsQuery();
 
   if (isLoading) {
     return (
@@ -106,6 +114,24 @@ export default function HostDashboardPage() {
   const draftListingCount =
     listingsData?.filter((listing) => listing.status === "draft").length ?? 0;
 
+  const completedStats = useMemo(() => {
+    if (!bookingsQuery.data) {
+      return { completed: 0, total: 0, revenue: 0, active: 0 };
+    }
+    const { bookings } = bookingsQuery.data;
+    const completed = bookings.filter((booking) => booking.status === "completed");
+    const total = completed.length;
+    const revenue = completed.reduce((sum, booking) => sum + (booking.totalAmount ?? 0), 0);
+    const active = bookings.filter(
+      (booking) =>
+        booking.status === "confirmed" ||
+        booking.status === "ongoing" ||
+        booking.status === "checkout_due" ||
+        booking.status === "guest_departed",
+    ).length;
+    return { completed: total, totalBookings: bookings.length, revenue, active };
+  }, [bookingsQuery.data]);
+
   return (
     <div className="space-y-8">
       {needsSetup && (
@@ -159,13 +185,16 @@ export default function HostDashboardPage() {
               <CardContent className="space-y-3">
                 <div>
                   <p className="text-xs uppercase text-slate-500">Revenue generated</p>
-                  <p className="text-2xl font-semibold text-slate-900">₦0</p>
+                  <p className="text-2xl font-semibold text-slate-900">
+                    ₦{completedStats.revenue.toLocaleString()}
+                  </p>
                 </div>
                 <p className="text-sm text-slate-600">
-                  Completed bookings: <span className="font-semibold">0</span>
+                  Completed bookings:{" "}
+                  <span className="font-semibold">{completedStats.completed}</span>
                 </p>
                 <p className="text-sm text-slate-600">
-                  Ongoing stays: <span className="font-semibold">0</span>
+                  Ongoing stays: <span className="font-semibold">{completedStats.active}</span>
                 </p>
               </CardContent>
             </Card>

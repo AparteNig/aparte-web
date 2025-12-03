@@ -90,6 +90,14 @@ export default function HostCalendarPage() {
     [blocks, tempBlocks, selectedListingId],
   );
 
+  const blackoutBlocks = useMemo(
+    () =>
+      combinedBlocks.filter(
+        (block) => !block.reason?.toLowerCase().startsWith("booked"),
+      ),
+    [combinedBlocks],
+  );
+
   const daysInMonth = useMemo(() => {
     const firstDay = new Date(Number(month.split("-")[0]), Number(month.split("-")[1]) - 1, 1);
     const startWeekday = firstDay.getDay();
@@ -163,9 +171,11 @@ export default function HostCalendarPage() {
             </div>
             <div className="grid grid-cols-7 gap-2 text-sm">
               {daysInMonth.map(({ date, currentMonth }) => {
-                const isBlackout = combinedBlocks.some((block) =>
+                const blockEntry = combinedBlocks.find((block) =>
                   isDateBetween(date, block.startDate, block.endDate),
                 );
+                const isBooked = blockEntry?.reason?.toLowerCase().startsWith("booked");
+                const hasBlock = Boolean(blockEntry);
                 const isSelected =
                   selectionStart &&
                   selectionEnd &&
@@ -190,12 +200,17 @@ export default function HostCalendarPage() {
                     className={cn(
                       "flex h-16 cursor-pointer flex-col items-center justify-center rounded-2xl border",
                       currentMonth ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50 text-slate-400",
-                      isBlackout && "bg-rose-100 text-rose-800 border-rose-200",
+                      hasBlock &&
+                        (isBooked
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "bg-rose-100 text-rose-800 border-rose-200"),
                       isSelected && "bg-primary/20 border-primary text-primary font-semibold",
                     )}
                   >
                     <span>{new Date(date).getDate()}</span>
-                    {isBlackout && <span className="text-[10px]">Blocked</span>}
+                    {hasBlock && (
+                      <span className="text-[10px]">{isBooked ? "Booked" : "Blocked"}</span>
+                    )}
                   </div>
                 );
               })}
@@ -234,37 +249,37 @@ export default function HostCalendarPage() {
                     type="primary"
                     className="rounded-2xl"
                     disabled={confirming}
-                  onClick={async () => {
-                    if (!selectedListingId || !pendingRange) return;
-                    const tempId = -Date.now();
-                    const { start, end, reason } = pendingRange;
-                    setConfirming(true);
-                    setTempBlocks((prev) => [
-                      ...prev,
-                      {
-                        id: tempId,
-                        listingId: selectedListingId,
-                        startDate: start,
-                        endDate: end,
-                        reason: reason ?? "",
-                      },
-                    ]);
-                    setPendingRange(null);
-                    setSelectionStart(null);
-                    setSelectionEnd(null);
-                    try {
-                      await addBlock.mutateAsync({
-                        startDate: start,
-                        endDate: end,
-                        reason,
-                      });
-                    } finally {
-                      setTempBlocks((prev) =>
-                        prev.filter((block) => !(block.id === tempId && block.listingId === selectedListingId)),
-                      );
-                      setConfirming(false);
-                    }
-                  }}
+                    onClick={async () => {
+                      if (!selectedListingId || !pendingRange) return;
+                      const tempId = -Date.now();
+                      const { start, end, reason } = pendingRange;
+                      setConfirming(true);
+                      setTempBlocks((prev) => [
+                        ...prev,
+                        {
+                          id: tempId,
+                          listingId: selectedListingId,
+                          startDate: start,
+                          endDate: end,
+                          reason: reason ?? "",
+                        },
+                      ]);
+                      setPendingRange(null);
+                      setSelectionStart(null);
+                      setSelectionEnd(null);
+                      try {
+                        await addBlock.mutateAsync({
+                          startDate: start,
+                          endDate: end,
+                          reason,
+                        });
+                      } finally {
+                        setTempBlocks((prev) =>
+                          prev.filter((block) => !(block.id === tempId && block.listingId === selectedListingId)),
+                        );
+                        setConfirming(false);
+                      }
+                    }}
                   >
                     {confirming ? (
                       <span className="flex items-center gap-2">
@@ -289,13 +304,14 @@ export default function HostCalendarPage() {
                 </div>
               </form>
             )}
+
             {isLoading ? (
               <p>Loading calendar...</p>
-            ) : combinedBlocks.length === 0 ? (
+            ) : blackoutBlocks.length === 0 ? (
               <p>No blackout dates for this month.</p>
             ) : (
               <ul className="space-y-2">
-                {combinedBlocks.map((block) => (
+                {blackoutBlocks.map((block) => (
                   <li
                     key={block.id}
                     className="flex items-center justify-between rounded-2xl border border-slate-200 p-3"

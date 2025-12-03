@@ -62,6 +62,35 @@ export type HostListingDetail = HostListing & {
   calendarBlocks?: ListingCalendarBlock[];
 };
 
+export type HostBooking = {
+  id: number;
+  listingId: number;
+  hostId: number;
+  guestName: string;
+  guestEmail: string;
+  guestPhone: string;
+  startDate: string;
+  endDate: string;
+  nights: number;
+  status: string;
+  totalAmount: number;
+  notes: string;
+  createdAt: string;
+  listing?: {
+    id: number;
+    title: string;
+    city: string;
+    country: string;
+  };
+};
+
+export type HostBookingsSummary = {
+  activeCount: number;
+  activeAmount: number;
+  completedCount: number;
+  completedAmount: number;
+};
+
 export type HostProfileWithStatus = {
   onboardingStatus: HostOnboardingStatus;
   payoutStatus: string;

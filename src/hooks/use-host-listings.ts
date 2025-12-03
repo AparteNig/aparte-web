@@ -56,8 +56,9 @@ export const usePublishListingMutation = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (listingId: number) => publishHostListing(listingId),
-    onSuccess: () => {
+    onSuccess: (_, listingId) => {
       queryClient.invalidateQueries({ queryKey: hostListingsQueryKey });
+      queryClient.invalidateQueries({ queryKey: hostListingQueryKey(listingId) });
     },
   });
 };
@@ -66,8 +67,9 @@ export const useMoveListingToDraftMutation = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (listingId: number) => draftHostListing(listingId),
-    onSuccess: () => {
+    onSuccess: (_, listingId) => {
       queryClient.invalidateQueries({ queryKey: hostListingsQueryKey });
+      queryClient.invalidateQueries({ queryKey: hostListingQueryKey(listingId) });
     },
   });
 };

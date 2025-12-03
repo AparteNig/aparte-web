@@ -20,13 +20,14 @@ import {
   PackageIcon,
   TickIcon,
   NotificationIcon,
-  AccountIcon
+  AccountIcon,
+  CalendarIcon
 } from "@/assets/icons";
 
 const iconRegistry = {
   dashboard: DashboardIcon,
   listings: HomeIcon,
-  calendar: NavigationIcon,
+  calendar: CalendarIcon,
   messages: MessageCenterIocn,
   payouts: WalletIcon,
   users: UserIcon,
@@ -95,7 +96,12 @@ export const SidebarNav = ({ items, logoutHref, cookieName }: SidebarNavProps) =
                   isActive ? "bg-[#F5F5F7] text-primary" : "hover:bg-slate-100"
                 )}
               >
-                {IconComponent && <IconComponent color={isActive ? "#00AC35" : "#1F2937"} />}
+                {IconComponent && (
+                  <IconComponent
+                    color={isActive ? "#00AC35" : "#1F2937"}
+                    color2={isActive ? "#00AC35" : "#1F2937"}
+                  />
+                )}
                 {!collapsed && <span>{item.label}</span>}
               </Link>
             );

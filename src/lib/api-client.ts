@@ -1,6 +1,12 @@
 import { HOST_AUTH_COOKIE, clearAuthCookie, getAuthCookie } from "@/lib/auth";
 import type { HostProfile } from "@/types/host";
-import type { HostListing, HostListingDetail, ListingCalendarBlock } from "@/types/listing";
+import type {
+  HostBooking,
+  HostBookingsSummary,
+  HostListing,
+  HostListingDetail,
+  ListingCalendarBlock,
+} from "@/types/listing";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -210,4 +216,56 @@ export const addListingBlackout = (
 export const deleteListingBlackout = (listingId: number, blockId: number) =>
   apiFetch<void>(`/hosts/listings/${listingId}/calendar/blackouts/${blockId}`, {
     method: "DELETE",
+  });
+
+export const getHostBookings = () =>
+  apiFetch<{ bookings: HostBooking[]; summary: HostBookingsSummary }>("/hosts/bookings", {
+    method: "GET",
+  });
+
+export const completeHostBooking = (bookingId: number) =>
+  apiFetch<{ booking: HostBooking }>(`/hosts/bookings/${bookingId}/complete`, {
+    method: "PATCH",
+  });
+
+export type CreateCustomerBookingPayload = {
+  listingId: number;
+  guestName: string;
+  guestEmail?: string;
+  guestPhone?: string;
+  startDate: string;
+  endDate: string;
+  nights?: number;
+  notes?: string;
+};
+
+export const createCustomerBooking = (payload: CreateCustomerBookingPayload) =>
+  apiFetch<{ booking: HostBooking }>("/customer/bookings", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    auth: false,
+  });
+
+export const checkInCustomerBooking = (bookingId: number) =>
+  apiFetch<{ booking: HostBooking }>(`/customer/bookings/${bookingId}/checkin`, {
+    method: "POST",
+    auth: false,
+  });
+
+export const markBookingCheckoutDue = (bookingId: number) =>
+  apiFetch<{ booking: HostBooking }>(`/customer/bookings/${bookingId}/checkout`, {
+    method: "POST",
+    auth: false,
+  });
+
+export const guestCheckoutCustomerBooking = (bookingId: number) =>
+  apiFetch<{ booking: HostBooking }>(`/customer/bookings/${bookingId}/guest-checkout`, {
+    method: "POST",
+    auth: false,
+  });
+
+export const completeCustomerBooking = (bookingId: number) =>
+  apiFetch<{ booking: HostBooking }>(`/customer/bookings/${bookingId}/complete`, {
+    method: "POST",
+    auth: false,
   });

@@ -13,6 +13,7 @@ const navItems = [
   { label: "Overview", href: "/host/dashboard", icon: "dashboard" },
   { label: "Listings", href: "/host/dashboard/listings", icon: "listings" },
   { label: "Calendar", href: "/host/dashboard/calendar", icon: "calendar" },
+  { label: "Bookings", href: "/host/dashboard/bookings", icon: "bookings" },
   { label: "Messages", href: "/host/dashboard/messages", icon: "messages" },
   { label: "Payouts", href: "/host/dashboard/payouts", icon: "payouts" },
   { label: "Profile", href: "/host/dashboard/profile", icon: "profile" },
