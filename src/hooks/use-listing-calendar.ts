@@ -11,7 +11,7 @@ export const listingCalendarKey = (listingId: number, month?: string) => [
 ];
 
 export const useListingCalendarQuery = (listingId?: number, month?: string) => {
-  const queryKey = listingId ? listingCalendarKey(listingId, month) : undefined;
+  const queryKey = listingId ? listingCalendarKey(listingId, month) : ["listingCalendar", "inactive"];
   return useQuery<ListingCalendarBlock[]>({
     queryKey,
     queryFn: async () => {

@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import type { NavItem } from "@/components/dashboard/sidebar-nav";
 import { ADMIN_AUTH_COOKIE } from "@/lib/auth";
 
-const navItems = [
+const navItems: NavItem[] = [
   { label: "Overview", href: "/admin/dashboard" },
   { label: "Users", href: "/admin/dashboard/users" },
   { label: "Listings", href: "/admin/dashboard/listings" },

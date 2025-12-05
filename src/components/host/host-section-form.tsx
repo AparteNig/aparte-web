@@ -50,7 +50,8 @@ export const HostSectionForm = ({ config, profile }: HostSectionFormProps) => {
       } else if (typeof rawValue === "boolean") {
         values[field.name] = rawValue ? "true" : "false";
       } else {
-        values[field.name] = rawValue ?? "";
+        values[field.name] =
+          rawValue === undefined || rawValue === null ? "" : String(rawValue);
       }
     });
     return values;
