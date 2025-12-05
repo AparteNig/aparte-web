@@ -8,6 +8,7 @@ import { useHostBookingsQuery, useCompleteBookingMutation } from "@/hooks/use-bo
 import { useHostListingsQuery } from "@/hooks/use-host-listings";
 import { useListingCalendarQuery } from "@/hooks/use-listing-calendar";
 import { cn } from "@/lib/utils";
+import type { ListingCalendarBlock } from "@/types/listing";
 
 const formatDate = (date: Date) => date.toISOString().split("T")[0];
 const isDateBetween = (date: string, start: string, end: string) => {
@@ -40,10 +41,13 @@ export default function HostBookingsPage() {
     }
   }, [listings, selectedListingId]);
 
-  const { data: blocks = [], isLoading: calendarLoading } = useListingCalendarQuery(
+  const { data: blocksData, isLoading: calendarLoading } = useListingCalendarQuery(
     selectedListingId,
     month,
   );
+  const blocks: ListingCalendarBlock[] = Array.isArray(blocksData)
+    ? (blocksData as ListingCalendarBlock[])
+    : [];
 
   const bookingsForListing = useMemo(() => {
     if (!selectedListingId) return bookings;

@@ -1,10 +1,9 @@
 /* eslint-disable prefer-destructuring */
 /* eslint-disable no-nested-ternary */
 import { SelectOptionType } from "@/utils/types";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, ChevronDown } from "lucide-react";
 import { forwardRef, useEffect, useState } from "react";
 import Label from "./Label";
-import { FaAngleDown } from "react-icons/fa";
 
 const SelectWithInput = forwardRef<
   HTMLInputElement,
@@ -195,7 +194,7 @@ const SelectWithInput = forwardRef<
                 {...props}
               />
               <span className="top-1/2 -translate-y-1/2 right-4 absolute text-slate-500">
-                <FaAngleDown />
+                <ChevronDown className="h-4 w-4" />
               </span>
             </div>
 

@@ -80,6 +80,13 @@ const isVideoUrl = (url: string) => {
   }
 };
 
+type MediaItem = {
+  id: number;
+  url: string;
+  caption?: string;
+  type: "image" | "video";
+};
+
 export default function HostListingDetailPage() {
   const router = useRouter();
   const params = useParams<{ listingId: string }>();
@@ -122,19 +129,19 @@ export default function HostListingDetailPage() {
     publishListing.isPending ||
     draftListing.isPending;
 
-  const mediaItems = useMemo(
+  const mediaItems = useMemo<MediaItem[]>(
     () =>
       (listing?.photos ?? [])
         .map((photo) => ({
           id: photo.id,
           url: photo.url,
-          caption: photo.caption,
-          type: isVideoUrl(photo.url) ? "video" : "image",
+          caption: photo.caption ?? undefined,
+          type: (isVideoUrl(photo.url) ? "video" : "image") as "video" | "image",
         }))
         .sort((a, b) => (a.type === "video" && b.type !== "video" ? -1 : a.type === b.type ? 0 : 1)),
     [listing?.photos],
   );
-  const previewItems = useMemo(
+  const previewItems = useMemo<Array<{ item: MediaItem; index: number }>>(
     () => mediaItems.map((item, index) => ({ item, index })).slice(0, Math.min(mediaItems.length, 5)),
     [mediaItems],
   );

@@ -3,13 +3,14 @@
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import type { NavItem } from "@/components/dashboard/sidebar-nav";
 import { HOST_AUTH_COOKIE } from "@/lib/auth";
 import { useHostProfileQuery } from "@/hooks/use-host-profile";
 import { ProfileSetupModal } from "@/components/host/profile-setup-modal";
 import { HostHeaderBar } from "@/components/host/host-header-bar";
 import { ResponsiveGate } from "@/components/layout/responsive-gate";
 
-const navItems = [
+const navItems: NavItem[] = [
   { label: "Overview", href: "/host/dashboard", icon: "dashboard" },
   { label: "Listings", href: "/host/dashboard/listings", icon: "listings" },
   { label: "Calendar", href: "/host/dashboard/calendar", icon: "calendar" },

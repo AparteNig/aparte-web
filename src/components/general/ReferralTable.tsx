@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { BiSkipNext, BiSkipPrevious } from "react-icons/bi";
-import { FaChevronDown, FaChevronUp } from "react-icons/fa";
+import { ChevronDown, ChevronUp, SkipBack, SkipForward } from "lucide-react";
 
 type ReferralRecord = {
   referrerName: string;
@@ -104,7 +103,7 @@ const ReferralTable: React.FC = () => {
                   <span className="px-2 py-1 mr-2 text-sm text-green-800 bg-green-100 rounded-full">
                     {referral.referralCount} referrals
                   </span>
-                  {isExpanded ? <FaChevronUp size={14} /> : <FaChevronDown size={14} />}
+                  {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </div>
               </div>
               {isExpanded && (
@@ -172,7 +171,7 @@ const ReferralTable: React.FC = () => {
           disabled={currentPage === 1}
           className="p-2 text-xl border border-green-400 rounded-full disabled:opacity-50"
         >
-          <BiSkipPrevious />
+          <SkipBack className="h-4 w-4" />
         </button>
         <span>
           Page {currentPage} / {totalPages}
@@ -183,7 +182,7 @@ const ReferralTable: React.FC = () => {
           disabled={currentPage === totalPages}
           className="p-2 text-xl border border-green-400 rounded-full disabled:opacity-50"
         >
-          <BiSkipNext />
+          <SkipForward className="h-4 w-4" />
         </button>
       </div>
     </div>

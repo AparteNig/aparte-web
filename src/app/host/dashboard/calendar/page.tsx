@@ -13,6 +13,7 @@ import {
   useListingCalendarQuery,
 } from "@/hooks/use-listing-calendar";
 import { cn } from "@/lib/utils";
+import type { ListingCalendarBlock } from "@/types/listing";
 
 const formatDate = (date: Date) => date.toISOString().split("T")[0];
 
@@ -37,7 +38,10 @@ export default function HostCalendarPage() {
     }
   }, [listings, selectedListingId]);
 
-  const { data: blocks = [], isLoading } = useListingCalendarQuery(selectedListingId, month);
+  const { data: blocksData, isLoading } = useListingCalendarQuery(selectedListingId, month);
+  const blocks: ListingCalendarBlock[] = Array.isArray(blocksData)
+    ? (blocksData as ListingCalendarBlock[])
+    : [];
   const invalidateListingDetail = () => {
     if (selectedListingId) {
       queryClient.invalidateQueries({ queryKey: hostListingQueryKey(selectedListingId) });
@@ -64,9 +68,7 @@ export default function HostCalendarPage() {
     end: string;
     reason?: string;
   } | null>(null);
-  const [tempBlocks, setTempBlocks] = useState<
-    Array<{ id: number; listingId: number; startDate: string; endDate: string; reason: string }>
-  >([]);
+  const [tempBlocks, setTempBlocks] = useState<ListingCalendarBlock[]>([]);
   const [confirming, setConfirming] = useState(false);
   const [removingBlockId, setRemovingBlockId] = useState<number | null>(null);
 
