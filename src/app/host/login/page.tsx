@@ -32,6 +32,7 @@ export default function HostLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [otpId, setOtpId] = useState<number | null>(null);
   const [otpCode, setOtpCode] = useState("");
+  const [devPreview, setDevPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -43,9 +44,19 @@ export default function HostLoginPage() {
   const handleAuthSuccess = (payload: HostLoginResponse) => {
     if ("requiresOtp" in payload && payload.requiresOtp) {
       setOtpId(payload.otpId);
+      if (payload.devPreview) {
+        setDevPreview(payload.devPreview);
+        const match = payload.devPreview.match(/(\d{6})/);
+        if (match) {
+          setOtpCode(match[1]);
+        }
+      } else {
+        setDevPreview(null);
+      }
       return;
     }
 
+    setDevPreview(null);
     setAuthCookie(HOST_AUTH_COOKIE, payload.tokens.accessToken);
     queryClient.setQueryData(hostProfileQueryKey, payload.hostProfile);
     router.push("/host/dashboard");
@@ -56,10 +67,12 @@ export default function HostLoginPage() {
     onSuccess: (data) => {
       setError(null);
       setOtpCode("");
+      setDevPreview(null);
       handleAuthSuccess(data);
     },
     onError: (mutationError: unknown) => {
       setOtpId(null);
+      setDevPreview(null);
       setError(
         mutationError instanceof Error
           ? mutationError.message
@@ -73,6 +86,7 @@ export default function HostLoginPage() {
     onSuccess: (data) => {
       setError(null);
       setOtpCode("");
+      setDevPreview(null);
       if (data.hostProfile) {
         queryClient.setQueryData(hostProfileQueryKey, data.hostProfile);
       }
@@ -91,6 +105,7 @@ export default function HostLoginPage() {
   const onSubmit: SubmitHandler<HostLoginFields> = (values) => {
     setError(null);
     setOtpId(null);
+    setDevPreview(null);
     loginMutation.mutate({
       ...values,
       device: { type: "web" },
@@ -105,6 +120,21 @@ export default function HostLoginPage() {
       code: otpCode,
       device: { type: "web" },
     });
+  };
+
+  const dismissDevPreview = () => setDevPreview(null);
+  const handleCopyDevPreview = async () => {
+    if (!devPreview) return dismissDevPreview();
+    const codeToCopy = otpCode || devPreview;
+    try {
+      if (navigator?.clipboard) {
+        await navigator.clipboard.writeText(codeToCopy);
+      }
+    } catch {
+      // ignore clipboard errors in dev
+    } finally {
+      dismissDevPreview();
+    }
   };
 
   return (
@@ -178,6 +208,37 @@ export default function HostLoginPage() {
         </Link>
       </p>
       <PageFooter />
+      {devPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
+          <div className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6 text-center shadow-2xl">
+            <p className="text-xs font-semibold uppercase text-primary">Development mode</p>
+            <h3 className="text-xl font-semibold text-slate-900">OTP preview</h3>
+            <p className="text-sm text-slate-600">
+              Production logins send codes via email or SMS. This preview is only for local testing.
+            </p>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-mono text-lg tracking-[0.4em] text-slate-900">
+              {otpCode || devPreview}
+            </div>
+            <p className="rounded-2xl bg-slate-100 px-3 py-2 text-xs text-slate-500">
+              {devPreview}
+            </p>
+            <Button
+              type="primary"
+              className="w-full rounded-2xl text-base font-semibold"
+              onClick={handleCopyDevPreview}
+            >
+              Copy code & continue
+            </Button>
+            <button
+              type="button"
+              className="text-sm font-semibold text-slate-500 underline"
+              onClick={dismissDevPreview}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
     </AuthLayout>
   );
 }

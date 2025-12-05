@@ -8,7 +8,8 @@ import type {
   ListingCalendarBlock,
 } from "@/types/listing";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ?? "https://humble-liberation-staging.up.railway.app";
 
 type ApiFetchOptions = RequestInit & { auth?: boolean };
 
@@ -72,6 +73,7 @@ export type HostLoginSuccessResponse = {
 export type HostLoginOtpResponse = {
   requiresOtp: true;
   otpId: number;
+  devPreview?: string;
 };
 
 export type HostLoginResponse = HostLoginSuccessResponse | HostLoginOtpResponse;

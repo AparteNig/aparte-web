@@ -58,6 +58,23 @@ export default function HostDashboardPage() {
   const { data, isLoading, isError, error, refetch } = useHostProfileQuery();
   const { data: listingsData } = useHostListingsQuery();
   const bookingsQuery = useHostBookingsQuery();
+  const completedStats = useMemo(() => {
+    if (!bookingsQuery.data) {
+      return { completed: 0, total: 0, revenue: 0, active: 0 };
+    }
+    const { bookings } = bookingsQuery.data;
+    const completed = bookings.filter((booking) => booking.status === "completed");
+    const total = completed.length;
+    const revenue = completed.reduce((sum, booking) => sum + (booking.totalAmount ?? 0), 0);
+    const active = bookings.filter(
+      (booking) =>
+        booking.status === "confirmed" ||
+        booking.status === "ongoing" ||
+        booking.status === "checkout_due" ||
+        booking.status === "guest_departed",
+    ).length;
+    return { completed: total, totalBookings: bookings.length, revenue, active };
+  }, [bookingsQuery.data]);
 
   if (isLoading) {
     return (
@@ -113,24 +130,6 @@ export default function HostDashboardPage() {
     listingsData?.filter((listing) => listing.status === "published").length ?? 0;
   const draftListingCount =
     listingsData?.filter((listing) => listing.status === "draft").length ?? 0;
-
-  const completedStats = useMemo(() => {
-    if (!bookingsQuery.data) {
-      return { completed: 0, total: 0, revenue: 0, active: 0 };
-    }
-    const { bookings } = bookingsQuery.data;
-    const completed = bookings.filter((booking) => booking.status === "completed");
-    const total = completed.length;
-    const revenue = completed.reduce((sum, booking) => sum + (booking.totalAmount ?? 0), 0);
-    const active = bookings.filter(
-      (booking) =>
-        booking.status === "confirmed" ||
-        booking.status === "ongoing" ||
-        booking.status === "checkout_due" ||
-        booking.status === "guest_departed",
-    ).length;
-    return { completed: total, totalBookings: bookings.length, revenue, active };
-  }, [bookingsQuery.data]);
 
   return (
     <div className="space-y-8">

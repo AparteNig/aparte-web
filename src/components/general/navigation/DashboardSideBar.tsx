@@ -47,9 +47,7 @@ const DashboardSideBar = () => {
                   {item.Icon && (
                     <item.Icon
                       color={
-                        item.activeIn.includes(router.pathname)
-                          ? "#00AC35"
-                          : "black"
+                        item.activeIn.includes(router.pathname) ? "#00AC35" : "black"
                       }
                     />
                   )}
@@ -86,8 +84,7 @@ const DashboardSideBar = () => {
                   <div>
                     <p className="text-xl font-semibold">Help Center</p>
                     <p className="mt-3">
-                      Having Trouble in Learning. <br /> Please contact us for
-                      more <br />
+                      Having Trouble in Learning. <br /> Please contact us for more <br />
                       questions.
                     </p>
                   </div>
