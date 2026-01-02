@@ -120,6 +120,20 @@ export const HostProgressCard = ({ profile }: HostProgressCardProps) => {
                 Suspended
               </span>
             )}
+            {profile.adminApprovalStatus !== "approved" && (
+              <span
+                className={cn(
+                  "rounded-full px-3 py-1 font-medium",
+                  profile.adminApprovalStatus === "pending"
+                    ? "bg-amber-50 text-amber-700"
+                    : "bg-rose-50 text-rose-700",
+                )}
+              >
+                {profile.adminApprovalStatus === "pending"
+                  ? "Awaiting admin approval"
+                  : "Admin review required"}
+              </span>
+            )}
           </div>
           <ul className="space-y-3">
             {[...ORDERED_STEPS]

@@ -1,4 +1,4 @@
-import { HOST_AUTH_COOKIE, clearAuthCookie, getAuthCookie } from "@/lib/auth";
+import { ADMIN_AUTH_COOKIE, HOST_AUTH_COOKIE, clearAuthCookie, getAuthCookie } from "@/lib/auth";
 import type { HostProfile } from "@/types/host";
 import type {
   HostBooking,
@@ -7,11 +7,21 @@ import type {
   HostListingDetail,
   ListingCalendarBlock,
 } from "@/types/listing";
+import type {
+  AdminAccount,
+  AdminAuditLog,
+  AdminBookingRow,
+  AdminHost,
+  AdminListingDetail,
+  AdminListingRow,
+  AdminPayoutRequest,
+  AdminProfile,
+} from "@/types/admin";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "https://humble-liberation-staging.up.railway.app";
 
-type ApiFetchOptions = RequestInit & { auth?: boolean };
+type ApiFetchOptions = RequestInit & { auth?: boolean; authCookie?: "host" | "admin" };
 
 const isFormData = (body: BodyInit | null | undefined): body is FormData =>
   typeof FormData !== "undefined" && body instanceof FormData;
@@ -20,7 +30,7 @@ const buildUrl = (path: string) =>
   path.startsWith("http") ? path : `${API_BASE_URL.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
 
 export const apiFetch = async <T>(path: string, options: ApiFetchOptions = {}): Promise<T> => {
-  const { auth = true, headers, ...rest } = options;
+  const { auth = true, authCookie = "host", headers, ...rest } = options;
   const finalHeaders = new Headers(headers);
 
   if (!isFormData(rest.body) && !finalHeaders.has("Content-Type")) {
@@ -28,7 +38,8 @@ export const apiFetch = async <T>(path: string, options: ApiFetchOptions = {}): 
   }
 
   if (auth) {
-    const token = getAuthCookie(HOST_AUTH_COOKIE);
+    const cookieName = authCookie === "admin" ? ADMIN_AUTH_COOKIE : HOST_AUTH_COOKIE;
+    const token = getAuthCookie(cookieName);
     if (token) {
       finalHeaders.set("Authorization", `Bearer ${token}`);
     }
@@ -44,8 +55,13 @@ export const apiFetch = async <T>(path: string, options: ApiFetchOptions = {}): 
 
   if (!response.ok) {
     if (response.status === 401 && typeof window !== "undefined") {
-      clearAuthCookie(HOST_AUTH_COOKIE);
-      if (!window.location.pathname.startsWith("/host/login")) {
+      const cookieName = authCookie === "admin" ? ADMIN_AUTH_COOKIE : HOST_AUTH_COOKIE;
+      clearAuthCookie(cookieName);
+      if (authCookie === "admin") {
+        if (!window.location.pathname.startsWith("/admin")) {
+          window.location.href = "/admin/login";
+        }
+      } else if (!window.location.pathname.startsWith("/host/login")) {
         window.location.href = "/host/login";
       }
     }
@@ -59,10 +75,11 @@ export const apiFetch = async <T>(path: string, options: ApiFetchOptions = {}): 
   return payload as T;
 };
 
-export type HostAuthTokens = {
+export type AuthTokens = {
   accessToken: string;
   refreshToken: string;
 };
+export type HostAuthTokens = AuthTokens;
 
 export type HostLoginSuccessResponse = {
   requiresOtp: false;
@@ -77,6 +94,20 @@ export type HostLoginOtpResponse = {
 };
 
 export type HostLoginResponse = HostLoginSuccessResponse | HostLoginOtpResponse;
+
+export type AdminLoginSuccessResponse = {
+  requiresOtp: false;
+  tokens: AuthTokens;
+  adminProfile: AdminProfile;
+};
+
+export type AdminLoginOtpResponse = {
+  requiresOtp: true;
+  otpId: number;
+  devPreview?: string;
+};
+
+export type AdminLoginResponse = AdminLoginSuccessResponse | AdminLoginOtpResponse;
 
 export const registerHost = (payload: { email: string; phone: string; password: string }) =>
   apiFetch<{ hostProfile: HostProfile }>("/auth/hosts/register", {
@@ -96,16 +127,46 @@ export const loginHostRequest = (payload: {
     auth: false,
   });
 
+export const loginAdminRequest = (payload: {
+  email: string;
+  password: string;
+  device?: { type?: "web" | "android" | "ios"; ipAddress?: string };
+}) =>
+  apiFetch<AdminLoginResponse>("/auth/admins/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    auth: false,
+  });
+
+export const refreshAdminTokens = (payload: {
+  refreshToken: string;
+  device?: { type?: "web" | "android" | "ios"; ipAddress?: string };
+}) =>
+  apiFetch<{ tokens: AuthTokens; adminProfile: AdminProfile }>("/auth/admins/refresh", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    auth: false,
+  });
+
+export const logoutAdminRequest = () =>
+  apiFetch<{ success: boolean }>("/auth/admins/logout", {
+    method: "POST",
+    authCookie: "admin",
+  });
+
 export const verifyOtpRequest = (payload: {
   otpId: number;
   code: string;
   device?: { type?: "web" | "android" | "ios"; ipAddress?: string };
 }) =>
-  apiFetch<{ tokens: HostAuthTokens; hostProfile?: HostProfile }>("/auth/otp/verify", {
-    method: "POST",
-    body: JSON.stringify(payload),
-    auth: false,
-  });
+  apiFetch<{ tokens: AuthTokens; hostProfile?: HostProfile; adminProfile?: AdminProfile }>(
+    "/auth/otp/verify",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+      auth: false,
+    },
+  );
 
 export const getHostProfile = () =>
   apiFetch<{ hostProfile: HostProfile }>("/hosts/profile", {
@@ -271,3 +332,169 @@ export const completeCustomerBooking = (bookingId: number) =>
     method: "POST",
     auth: false,
   });
+
+const adminQuery = <T>(path: string, options: ApiFetchOptions = {}) =>
+  apiFetch<T>(path, { ...options, authCookie: "admin" });
+
+export const getAdminHosts = () =>
+  adminQuery<{ hosts: AdminHost[] }>("/admin/hosts").then((res) => res.hosts);
+
+export const getAdminAccounts = () =>
+  adminQuery<{ admins: AdminAccount[] }>("/admin/admins").then((res) => res.admins);
+
+export const getAdminProfile = () =>
+  adminQuery<{ adminProfile: AdminProfile }>("/auth/admins/me").then((res) => res.adminProfile);
+
+export const inviteAdminRequest = (payload: {
+  email: string;
+  fullName?: string;
+  phone?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  isSuperAdmin?: boolean;
+}) =>
+  adminQuery<{
+    email: string;
+    expiresAt: string;
+    token: string;
+    devEmailPreview?: { to: string; subject: string; body: string };
+  }>("/auth/admins/invite", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const getAdminInviteDetails = (token: string) =>
+  apiFetch<{ email: string; fullName: string; isSuperAdmin: boolean; expiresAt: string }>(
+    `/auth/admins/invite/${token}`,
+    { auth: false },
+  );
+
+export const activateAdminAccount = (payload: {
+  token: string;
+  password: string;
+  fullName?: string;
+}) =>
+  apiFetch<{ requiresOtp: boolean; otpId: number; devPreview?: string }>("/auth/admins/activate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    auth: false,
+  });
+
+export const suspendHost = (hostId: number, reason?: string) =>
+  adminQuery<{ host: AdminHost; suspended: boolean }>(`/admin/hosts/${hostId}/suspend`, {
+    method: "PATCH",
+    body: JSON.stringify({ reason }),
+  });
+
+export const restoreHost = (hostId: number) =>
+  adminQuery<{ host: AdminHost; suspended: boolean }>(`/admin/hosts/${hostId}/restore`, {
+    method: "PATCH",
+  });
+
+export const approveHost = (hostId: number, notes?: string) =>
+  adminQuery<{ host: AdminHost; approvalStatus: "approved" }>(`/admin/hosts/${hostId}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ notes }),
+  });
+
+export const rejectHost = (hostId: number, reason: string) =>
+  adminQuery<{ host: AdminHost; approvalStatus: "rejected" }>(`/admin/hosts/${hostId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+
+export const getAdminListings = () =>
+  adminQuery<{ listings: AdminListingRow[] }>("/admin/listings").then((res) => res.listings);
+
+export const getAdminListingDetail = (listingId: number) =>
+  adminQuery<AdminListingDetail>(`/admin/listings/${listingId}`);
+
+export const approveListing = (listingId: number, reviewNotes?: string) =>
+  adminQuery<{ listing: AdminListingRow["listing"] }>(`/admin/listings/${listingId}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ reviewNotes }),
+  });
+
+export const rejectListing = (listingId: number, reviewNotes?: string) =>
+  adminQuery<{ listing: AdminListingRow["listing"] }>(`/admin/listings/${listingId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reviewNotes }),
+  });
+
+export const suspendListing = (listingId: number, reason?: string) =>
+  adminQuery<{ listing: AdminListingRow["listing"] }>(`/admin/listings/${listingId}/suspend`, {
+    method: "PATCH",
+    body: JSON.stringify({ reason }),
+  });
+
+export const restoreListing = (listingId: number) =>
+  adminQuery<{ listing: AdminListingRow["listing"] }>(`/admin/listings/${listingId}/restore`, {
+    method: "PATCH",
+  });
+
+export const getAdminBookings = () =>
+  adminQuery<{ bookings: AdminBookingRow[] }>("/admin/bookings").then((res) => res.bookings);
+
+export const updateAdminBookingStatus = (
+  bookingId: number,
+  payload: { status: string; notes?: string },
+) =>
+  adminQuery<{ booking: AdminBookingRow["booking"] }>(`/admin/bookings/${bookingId}/status`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const updateAdminBookingNotes = (bookingId: number, notes: string) =>
+  adminQuery<{ booking: AdminBookingRow["booking"] }>(`/admin/bookings/${bookingId}/notes`, {
+    method: "PATCH",
+    body: JSON.stringify({ notes }),
+  });
+
+export const completeAdminBooking = (bookingId: number) =>
+  adminQuery<{ booking: AdminBookingRow["booking"]; payoutPreview?: unknown }>(
+    `/admin/bookings/${bookingId}/complete`,
+    {
+      method: "POST",
+    },
+  );
+
+export const getAdminPayoutRequests = () =>
+  adminQuery<{ payoutRequests: AdminPayoutRequest[] }>("/admin/payouts/requests").then(
+    (res) => res.payoutRequests,
+  );
+
+export const approvePayoutRequest = (requestId: number, notes?: string) =>
+  adminQuery<{ payoutRequest: AdminPayoutRequest }>(`/admin/payouts/${requestId}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ notes }),
+  });
+
+export const rejectPayoutRequest = (requestId: number, reason: string) =>
+  adminQuery<{ payoutRequest: AdminPayoutRequest }>(`/admin/payouts/${requestId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+
+export const markPayoutAsPaid = (requestId: number, reference?: string) =>
+  adminQuery<{ payoutRequest: AdminPayoutRequest }>(`/admin/payouts/${requestId}/mark-paid`, {
+    method: "POST",
+    body: JSON.stringify({ reference }),
+  });
+
+export const getAdminAuditLogs = (params?: {
+  limit?: number;
+  action?: string;
+  startDate?: string;
+  endDate?: string;
+}) => {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.action) query.set("action", params.action);
+  if (params?.startDate) query.set("startDate", params.startDate);
+  if (params?.endDate) query.set("endDate", params.endDate);
+  const url = `/admin/audit-logs${query.toString() ? `?${query.toString()}` : ""}`;
+  return adminQuery<{ entries: AdminAuditLog[] }>(url).then((res) => res.entries);
+};

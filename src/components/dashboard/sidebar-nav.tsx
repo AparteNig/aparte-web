@@ -1,12 +1,14 @@
  "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import Button from "@/components/general/Button";
-import { clearAuthCookie } from "@/lib/auth";
+import { ADMIN_AUTH_COOKIE, clearAuthCookie } from "@/lib/auth";
+import { logoutAdminRequest } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Logo,
   LogOutIcon,
@@ -43,6 +45,7 @@ export type NavItem = {
   label: string;
   href: string;
   icon?: IconName;
+  requiresSuperAdmin?: boolean;
 };
 
 type SidebarNavProps = {
@@ -56,9 +59,24 @@ export const SidebarNav = ({ items, logoutHref, cookieName }: SidebarNavProps) =
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [logoutHover, setLogoutHover] = useState(false);
+  const needsAdminProfile = useMemo(() => items.some((item) => item.requiresSuperAdmin), [items]);
+  const { data: adminProfile } = useAdminProfileQuery(needsAdminProfile);
+  const queryClient = useQueryClient();
+  const filteredItems = useMemo(() => {
+    if (!needsAdminProfile) return items;
+    return items.filter((item) => !item.requiresSuperAdmin || adminProfile?.isSuperAdmin);
+  }, [items, needsAdminProfile, adminProfile?.isSuperAdmin]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (cookieName === ADMIN_AUTH_COOKIE) {
+      try {
+        await logoutAdminRequest();
+      } catch {
+        // ignore logout failures so users can still exit
+      }
+    }
     clearAuthCookie(cookieName);
+    queryClient.clear();
     router.push(logoutHref);
   };
 
@@ -82,7 +100,7 @@ export const SidebarNav = ({ items, logoutHref, cookieName }: SidebarNavProps) =
           </button>
         </div>
         <nav className="space-y-1">
-          {items.map((item) => {
+          {filteredItems.map((item) => {
             const isSubPath = pathname.startsWith(`${item.href}/`);
             const isExact = pathname === item.href;
             const isActive = isExact || (item.href !== "/host/dashboard" && isSubPath);
@@ -137,3 +155,4 @@ export const SidebarNav = ({ items, logoutHref, cookieName }: SidebarNavProps) =
     </aside>
   );
 };
+import { useAdminProfileQuery } from "@/hooks/admin/use-admin-data";

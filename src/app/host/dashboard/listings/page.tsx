@@ -80,9 +80,16 @@ export default function HostListingsPage() {
   const [listingToDelete, setListingToDelete] = useState<{ id: number; title: string } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const canPublish = Boolean(
+  const requiresAdminApproval = profile ? profile.adminApprovalStatus !== "approved" : false;
+  const onboardingReady = Boolean(
     profile && profile.onboardingStatus !== "draft" && profile.completedSteps.length > 0,
   );
+  const canPublish = Boolean(onboardingReady && !requiresAdminApproval);
+  const publishBlockedMessage = requiresAdminApproval
+    ? profile?.adminApprovalStatus === "pending"
+      ? "Awaiting admin approval before publishing."
+      : "Contact support to resolve the admin review before publishing."
+    : "Finish onboarding in the profile tab to enable publishing.";
 
   const onSubmit = handleSubmit(async (values) => {
     try {
@@ -154,7 +161,7 @@ export default function HostListingsPage() {
           <div>
             <h3 className="text-2xl font-semibold">Your listings</h3>
             <p className="text-sm text-slate-600">
-              Drafts stay private until you hit publish. Publishing requires onboarding completion.
+              Drafts stay private until you hit publish. Publishing requires onboarding completion and admin approval.
             </p>
             <div className="mt-2 flex flex-wrap gap-3 text-xs">
               {["all", "draft", "published"].map((option) => (
@@ -381,11 +388,13 @@ export default function HostListingsPage() {
                       Delete
                     </Button>
                   </div>
-                  {!canPublish && (
+                  {listing.status === "pending_review" ? (
                     <p className="text-xs text-amber-700">
-                      Finish onboarding in the profile tab to enable publishing.
+                      Listing awaiting admin approval. You&apos;ll be notified once it&apos;s live.
                     </p>
-                  )}
+                  ) : !canPublish ? (
+                    <p className="text-xs text-amber-700">{publishBlockedMessage}</p>
+                  ) : null}
                 </CardContent>
               </Card>
             ))}

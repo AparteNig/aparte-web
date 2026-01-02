@@ -18,6 +18,7 @@ import {
   usePublishListingMutation,
   useUpdateListingMutation,
 } from "@/hooks/use-host-listings";
+import { useHostProfileQuery } from "@/hooks/use-host-profile";
 import { cn } from "@/lib/utils";
 import { uploadListingAsset } from "@/lib/api-client";
 
@@ -93,6 +94,7 @@ export default function HostListingDetailPage() {
   const listingId = params?.listingId ? Number(params.listingId) : undefined;
 
   const { data: listing, isLoading } = useHostListingQuery(listingId);
+  const { data: profile } = useHostProfileQuery();
   const updateListing = useUpdateListingMutation(listingId);
   const publishListing = usePublishListingMutation();
   const draftListing = useMoveListingToDraftMutation();
@@ -428,7 +430,12 @@ export default function HostListingDetailPage() {
               <Button
                 type="primary"
                 className="rounded-2xl"
-                disabled={!listing || publishListing.isPending}
+                disabled={
+                  !listing ||
+                  publishListing.isPending ||
+                  !canPublish ||
+                  listing.status === "pending_review"
+                }
                 onClick={() => listing && publishListing.mutate(listing.id)}
               >
                 Publish
@@ -495,6 +502,13 @@ export default function HostListingDetailPage() {
                   <span className="text-sm font-normal text-slate-500">per night</span>
                 </p>
               </div>
+              {listing.status === "pending_review" ? (
+                <p className="text-sm text-amber-700">
+                  Listing submitted for admin approval. You&apos;ll be notified once it&apos;s live.
+                </p>
+              ) : publishDisabledReason ? (
+                <p className="text-sm text-amber-700">{publishDisabledReason}</p>
+              ) : null}
               {renderMediaGrid()}
               {showEditForm && (
                 <div className="flex flex-col gap-2 text-sm">
@@ -779,3 +793,15 @@ export default function HostListingDetailPage() {
     </div>
   );
 }
+  const requiresAdminApproval = profile ? profile.adminApprovalStatus !== "approved" : false;
+  const onboardingReady = Boolean(
+    profile && profile.onboardingStatus !== "draft" && profile.completedSteps.length > 0,
+  );
+  const canPublish = Boolean(onboardingReady && !requiresAdminApproval);
+  const publishDisabledReason = !canPublish
+    ? requiresAdminApproval
+      ? profile?.adminApprovalStatus === "pending"
+        ? "Awaiting admin approval before publishing."
+        : "Your profile needs admin review before publishing."
+      : "Complete onboarding requirements before publishing."
+    : null;

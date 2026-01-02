@@ -6,11 +6,13 @@ import { ADMIN_AUTH_COOKIE } from "@/lib/auth";
 
 const navItems: NavItem[] = [
   { label: "Overview", href: "/admin/dashboard", icon: "dashboard" },
-  { label: "Users", href: "/admin/users", icon: "users" },
+  { label: "Hosts", href: "/admin/hosts", icon: "users" },
   { label: "Listings", href: "/admin/listings", icon: "listings" },
   { label: "Bookings", href: "/admin/bookings", icon: "bookings" },
-  { label: "Reviews", href: "/admin/reviews", icon: "reviews" },
-  { label: "Alerts", href: "/admin/alerts", icon: "alerts" }
+  { label: "Payouts", href: "/admin/payouts", icon: "payouts" },
+  { label: "All admins", href: "/admin/admins", icon: "users", requiresSuperAdmin: true },
+  { label: "Add admin", href: "/admin/add-admin", icon: "users", requiresSuperAdmin: true },
+  { label: "Audit logs", href: "/admin/audit-logs", icon: "alerts" }
 ];
 
 export default function AdminPanelLayout({ children }: { children: ReactNode }) {
