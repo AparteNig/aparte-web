@@ -4,7 +4,7 @@ import { QueryProvider } from "@/components/providers/query-provider";
 
 export const metadata: Metadata = {
   title: "Aparte Console",
-  description: "Admin + host portals for the Aparte marketplace.",
+  description: "Admin + landlord portals for the Aparte marketplace.",
 };
 
 export default function RootLayout({

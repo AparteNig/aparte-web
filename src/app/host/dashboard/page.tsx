@@ -79,7 +79,7 @@ export default function HostDashboardPage() {
   if (isLoading) {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-500">
-        Loading your host overview...
+        Loading your landlord overview...
       </div>
     );
   }
@@ -87,7 +87,7 @@ export default function HostDashboardPage() {
   if (isError || !data) {
     return (
       <div className="space-y-4 rounded-3xl border border-red-200 bg-red-50 p-8 text-sm text-red-700">
-        <p>We couldn’t load your host data.</p>
+        <p>We couldn’t load your landlord data.</p>
         <p className="text-xs">
           {error instanceof Error ? error.message : "Unexpected error"}
         </p>

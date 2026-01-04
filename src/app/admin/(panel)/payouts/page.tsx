@@ -60,7 +60,7 @@ export default function AdminPayoutsPage() {
                   {payoutsQuery.data.map((request) => (
                     <tr key={request.id}>
                       <td className="py-3">
-                        <div className="font-semibold text-slate-900">Host #{request.hostId}</div>
+                        <div className="font-semibold text-slate-900">Landlord #{request.hostId}</div>
                         <p className="text-xs text-slate-500">
                           Requested {new Date(request.createdAt).toLocaleString()}
                         </p>

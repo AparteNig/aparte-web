@@ -59,9 +59,9 @@ export default function AdminDashboardPage() {
     <div className="space-y-8">
       <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <StatCard
-          label="Pending host approvals"
+          label="Pending landlord approvals"
           value={pendingHosts}
-          helper={`${suspendedHosts} hosts currently suspended`}
+          helper={`${suspendedHosts} landlords currently suspended`}
         />
         <StatCard
           label="Listings requiring review"
@@ -79,7 +79,7 @@ export default function AdminDashboardPage() {
           helper="Pending manual approval"
         />
         <StatCard
-          label="Total hosts"
+          label="Total landlords"
           value={hosts.length}
           helper="Across all onboarding stages"
         />
@@ -138,11 +138,11 @@ export default function AdminDashboardPage() {
       <section className="grid gap-4 md:grid-cols-2">
         <Card className="border-slate-200">
           <CardHeader>
-            <CardTitle>Hosts awaiting approval</CardTitle>
+            <CardTitle>Landlords awaiting approval</CardTitle>
           </CardHeader>
           <CardContent>
             {pendingHosts === 0 ? (
-              <p className="text-sm text-slate-500">No pending hosts right now.</p>
+              <p className="text-sm text-slate-500">No pending landlords right now.</p>
             ) : (
               <ul className="space-y-2 text-sm text-slate-700">
                 {hosts
@@ -179,7 +179,7 @@ export default function AdminDashboardPage() {
                   .map((request) => (
                     <li key={request.id} className="rounded-2xl border border-slate-200 p-3">
                       <p className="font-semibold text-slate-900">
-                        ₦{(request.amount / 100).toLocaleString()} · Host #{request.hostId}
+                        ₦{(request.amount / 100).toLocaleString()} · Landlord #{request.hostId}
                       </p>
                       <p className="text-xs text-slate-500">
                         Requested {new Date(request.createdAt).toLocaleString()}

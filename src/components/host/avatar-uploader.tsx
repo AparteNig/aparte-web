@@ -51,7 +51,7 @@ export const HostAvatarUploader = ({ profile }: HostAvatarUploaderProps) => {
           {profile.avatarUrl ? (
             <img
               src={profile.avatarUrl}
-              alt="Host avatar"
+              alt="Landlord avatar"
               className="h-24 w-24 rounded-full border border-slate-200 object-cover"
             />
           ) : (

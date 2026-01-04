@@ -21,7 +21,7 @@ const getGreeting = () => {
 export const HostHeaderBar = ({ profile, className }: HostHeaderBarProps) => {
   const router = useRouter();
   const greeting = useMemo(getGreeting, []);
-  const displayName = profile?.displayName || profile?.fullName || "Host";
+  const displayName = profile?.displayName || profile?.fullName || "Landlord";
   const location = [
     profile?.addressLine1,
     profile?.city,
@@ -123,7 +123,7 @@ export const HostHeaderBar = ({ profile, className }: HostHeaderBarProps) => {
             {profile?.avatarUrl ? (
               <Image
                 src={profile.avatarUrl}
-                alt="Host avatar"
+                alt="Landlord avatar"
                 fill
                 sizes="44px"
                 className="object-cover"

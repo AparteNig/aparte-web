@@ -6,7 +6,7 @@ import { ADMIN_AUTH_COOKIE } from "@/lib/auth";
 
 const navItems: NavItem[] = [
   { label: "Overview", href: "/admin/dashboard", icon: "dashboard" },
-  { label: "Hosts", href: "/admin/hosts", icon: "users" },
+  { label: "Landlords", href: "/admin/hosts", icon: "users" },
   { label: "Listings", href: "/admin/listings", icon: "listings" },
   { label: "Bookings", href: "/admin/bookings", icon: "bookings" },
   { label: "Payouts", href: "/admin/payouts", icon: "payouts" },

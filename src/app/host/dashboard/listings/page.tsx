@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 
 import { Input } from "@/components/ui/input";
 import Button from "@/components/general/Button";
@@ -19,6 +19,7 @@ import {
 } from "@/hooks/use-host-listings";
 import type { HostListing } from "@/types/listing";
 import { cn } from "@/lib/utils";
+import PillMultiSelect from "@/components/general/form/PillMultiSelect";
 
 type ListingFormValues = {
   title: string;
@@ -28,8 +29,8 @@ type ListingFormValues = {
   country: string;
   nightlyPrice: string;
   maxGuests: string;
-  amenities: string;
-  houseRules: string;
+  amenities: string[];
+  houseRules: string[];
 };
 
 const initialFormValues: ListingFormValues = {
@@ -40,15 +41,33 @@ const initialFormValues: ListingFormValues = {
   country: "Nigeria",
   nightlyPrice: "",
   maxGuests: "1",
-  amenities: "",
-  houseRules: "",
+  amenities: [],
+  houseRules: [],
 };
 
-const parseCommaSeparated = (value: string) =>
-  value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
+const AMENITY_OPTIONS = [
+  "WiFi",
+  "Generator",
+  "Backup power",
+  "Air conditioning",
+  "Smart TV",
+  "Workspace",
+  "Pool",
+  "Gym",
+  "Parking",
+  "Laundry",
+  "Security",
+];
+
+const HOUSE_RULE_OPTIONS = [
+  "No smoking",
+  "No parties",
+  "Quiet hours after 10pm",
+  "No pets",
+  "Self check-in",
+  "Government ID required",
+  "Security deposit required",
+];
 
 const statusBadge = (status: HostListing["status"]) => {
   switch (status) {
@@ -72,7 +91,7 @@ export default function HostListingsPage() {
   const draftListing = useMoveListingToDraftMutation();
   const deleteListing = useDeleteListingMutation();
 
-  const { register, handleSubmit, reset } = useForm<ListingFormValues>({
+  const { register, control, handleSubmit, reset } = useForm<ListingFormValues>({
     defaultValues: initialFormValues,
   });
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -95,12 +114,23 @@ export default function HostListingsPage() {
     try {
       setFormError(null);
       const formData = new FormData();
-      Object.entries(values).forEach(([key, value]) => formData.append(key, value));
-      if (values.amenities) {
-        formData.set("amenities", JSON.stringify(parseCommaSeparated(values.amenities)));
+      const baseFields: Array<keyof ListingFormValues> = [
+        "title",
+        "description",
+        "addressLine1",
+        "city",
+        "country",
+        "nightlyPrice",
+        "maxGuests",
+      ];
+      baseFields.forEach((field) => {
+        formData.append(field, values[field]);
+      });
+      if (values.amenities.length > 0) {
+        formData.set("amenities", JSON.stringify(values.amenities));
       }
-      if (values.houseRules) {
-        formData.set("houseRules", JSON.stringify(parseCommaSeparated(values.houseRules)));
+      if (values.houseRules.length > 0) {
+        formData.set("houseRules", JSON.stringify(values.houseRules));
       }
       attachments.forEach((file) => formData.append("listingFiles", file));
       await createListing.mutateAsync(formData);
@@ -244,14 +274,42 @@ export default function HostListingsPage() {
                   <span className="font-semibold text-slate-800">Max guests</span>
                   <Input type="number" min="1" {...register("maxGuests", { required: true })} />
                 </label>
-                <label className="space-y-2 text-sm md:col-span-2">
-                  <span className="font-semibold text-slate-800">Amenities (comma separated)</span>
-                  <Input placeholder="WiFi, Generator, Pool" {...register("amenities")} />
-                </label>
-                <label className="space-y-2 text-sm md:col-span-2">
-                  <span className="font-semibold text-slate-800">House rules (comma separated)</span>
-                  <Input placeholder="No smoking, Quiet hours after 10pm" {...register("houseRules")} />
-                </label>
+                <div className="space-y-2 text-sm md:col-span-2">
+                  <Controller
+                    name="amenities"
+                    control={control}
+                    render={({ field }) => (
+                      <PillMultiSelect
+                        label="Amenities"
+                        helperText="Tap to toggle amenities or add your own."
+                        options={AMENITY_OPTIONS}
+                        selected={field.value ?? []}
+                        onChange={field.onChange}
+                        allowCustom
+                        customPlaceholder="Add amenity"
+                        addButtonLabel="Add amenity"
+                      />
+                    )}
+                  />
+                </div>
+                <div className="space-y-2 text-sm md:col-span-2">
+                  <Controller
+                    name="houseRules"
+                    control={control}
+                    render={({ field }) => (
+                      <PillMultiSelect
+                        label="House rules"
+                        helperText="Select common rules or create custom guidance."
+                        options={HOUSE_RULE_OPTIONS}
+                        selected={field.value ?? []}
+                        onChange={field.onChange}
+                        allowCustom
+                        customPlaceholder="Add rule"
+                        addButtonLabel="Add rule"
+                      />
+                    )}
+                  />
+                </div>
                 <div className="space-y-3 text-sm md:col-span-2">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-800">Photos / videos</span>

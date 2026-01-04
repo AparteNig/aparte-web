@@ -134,7 +134,7 @@ export default function AdminListingsPage() {
                   <thead className="text-xs uppercase text-slate-500">
                     <tr>
                       <th className="pb-2">Listing</th>
-                      <th className="pb-2">Host</th>
+                      <th className="pb-2">Landlord</th>
                       <th className="pb-2">Status</th>
                       <th className="pb-2">Notes</th>
                       <th className="pb-2 text-right">Actions</th>
@@ -172,7 +172,7 @@ export default function AdminListingsPage() {
                           </td>
                           <td className="py-3">
                             <div className="font-semibold text-slate-900">
-                              {entry.host?.fullName ?? `Host #${entry.listing.hostId}`}
+                              {entry.host?.fullName ?? `Landlord #${entry.listing.hostId}`}
                             </div>
                             <p className="text-xs text-slate-500">{entry.host?.email ?? "—"}</p>
                           </td>
@@ -291,11 +291,11 @@ export default function AdminListingsPage() {
               {rejectModalListing ? `Request changes for "${rejectModalListing.title}"` : "Request changes"}
             </h3>
             <p className="text-sm text-slate-500">
-              Share quick feedback so the host knows what to fix before resubmitting.
+              Share quick feedback so the landlord knows what to fix before resubmitting.
             </p>
           </div>
           <label className="space-y-2 text-sm text-slate-700">
-            <span className="font-semibold">Notes for the host</span>
+            <span className="font-semibold">Notes for the landlord</span>
             <textarea
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               rows={4}

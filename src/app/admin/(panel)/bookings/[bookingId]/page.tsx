@@ -102,8 +102,8 @@ export default function AdminBookingDetailPage() {
               <p className="capitalize">{booking.status.replace("_", " ")}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase text-slate-500">Host</p>
-              <p>{host?.fullName ?? host?.email ?? `Host #${booking.hostId}`}</p>
+              <p className="text-xs font-semibold uppercase text-slate-500">Landlord</p>
+              <p>{host?.fullName ?? host?.email ?? `Landlord #${booking.hostId}`}</p>
             </div>
           </div>
           <div className="rounded-2xl bg-slate-50 p-3">

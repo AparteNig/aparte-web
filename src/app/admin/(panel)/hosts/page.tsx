@@ -90,7 +90,7 @@ export default function AdminHostsPage() {
       <section className="rounded-3xl border border-slate-200 bg-white p-6">
         <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-2xl font-semibold text-slate-900">Host compliance queue</h2>
+            <h2 className="text-2xl font-semibold text-slate-900">Landlord compliance queue</h2>
             <p className="text-sm text-slate-500">
               Approve onboarding submissions, suspend risky accounts, and keep notes.
             </p>
@@ -136,9 +136,9 @@ export default function AdminHostsPage() {
           </div>
         </div>
         {hostsQuery.isLoading ? (
-          <p className="py-4 text-sm text-slate-500">Loading hosts...</p>
+          <p className="py-4 text-sm text-slate-500">Loading landlords...</p>
         ) : hosts.length === 0 ? (
-          <p className="py-4 text-sm text-slate-500">No hosts match this filter.</p>
+          <p className="py-4 text-sm text-slate-500">No landlords match this filter.</p>
         ) : (
           <div className="mt-4 overflow-auto">
             <table className="w-full text-left text-sm text-slate-600">
@@ -147,7 +147,7 @@ export default function AdminHostsPage() {
                   className="cursor-pointer transition hover:bg-slate-50"
                   onClick={() => router.push(`/admin/hosts/${host.id}`)}
                 >
-                  <th className="pb-2">Host</th>
+                  <th className="pb-2">Landlord</th>
                   <th className="pb-2">Status</th>
                   <th className="pb-2">Onboarding</th>
                   <th className="pb-2">Notes</th>
@@ -264,14 +264,14 @@ export default function AdminHostsPage() {
       >
         <div className="space-y-4 text-slate-800">
           <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Reject host</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Reject landlord</p>
             <h3 className="text-xl font-semibold text-slate-900">
               {rejectModalHost
                 ? `Request changes for ${rejectModalHost.fullName ?? rejectModalHost.email}`
                 : "Request changes"}
             </h3>
             <p className="text-sm text-slate-500">
-              Explain why this host can’t be approved yet so they can resolve issues.
+              Explain why this landlord can’t be approved yet so they can resolve issues.
             </p>
           </div>
           <label className="space-y-2 text-sm text-slate-700">
@@ -328,12 +328,12 @@ export default function AdminHostsPage() {
         <div className="space-y-4 text-slate-800">
           <div className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-rose-600">
-              Suspend host
+              Suspend landlord
             </p>
             <h3 className="text-xl font-semibold text-slate-900">
               {suspendModalHost
                 ? `Suspend ${suspendModalHost.fullName ?? suspendModalHost.email}`
-                : "Suspend host"}
+                : "Suspend landlord"}
             </h3>
             <p className="text-sm text-slate-500">
               Optional note helps other admins understand the action.

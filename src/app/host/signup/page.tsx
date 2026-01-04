@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { SubmitHandler, useForm } from "react-hook-form";
+import { Controller, SubmitHandler, useForm } from "react-hook-form";
 import { useMutation } from "@tanstack/react-query";
 
-import { EmailIcon, EyeIcon, EyeOffIcon, LockIcon, PhoneIcon } from "@/assets/icons";
+import { EmailIcon, EyeIcon, EyeOffIcon, LockIcon } from "@/assets/icons";
 import Button from "@/components/general/Button";
 import InputField from "@/components/general/form/InputField";
+import PhoneInput from "@/components/general/form/PhoneInput";
 import PageFooter from "@/components/general/PageFooter";
 import { AuthLayout } from "@/components/layouts/auth-layout";
 import { AuthHeader } from "@/components/pages/auth/auth-header";
@@ -27,6 +28,7 @@ export default function HostSignupPage() {
 
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<HostSignupFields>({
@@ -62,7 +64,7 @@ export default function HostSignupPage() {
   return (
     <AuthLayout containerClassName="flex flex-col gap-8">
       <AuthHeader
-        title="Create your host profile"
+        title="Create your landlord profile"
         subtitleStart="Kick off onboarding"
         boldText="in under 5 minutes"
         subtitleEnd="and get ready to publish listings."
@@ -102,17 +104,26 @@ export default function HostSignupPage() {
           >
             <InputField
               label="Email address"
-              placeholder="host@aparte.com"
+              placeholder="landlord@aparte.com"
               LeftIcon={EmailIcon}
               {...register("email", { required: "Email is required" })}
               error={errors.email?.message}
             />
-            <InputField
-              label="Phone number"
-              placeholder="+234..."
-              LeftIcon={PhoneIcon}
-              {...register("phone", { required: "Phone is required" })}
-              error={errors.phone?.message}
+            <Controller
+              name="phone"
+              control={control}
+              rules={{ required: "Phone is required" }}
+              render={({ field }) => (
+                <PhoneInput
+                  label="Phone number"
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  ref={field.ref}
+                  error={errors.phone?.message}
+                  placeholder="801 234 5678"
+                />
+              )}
             />
             <InputField
               label="Create password"

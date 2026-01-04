@@ -66,7 +66,7 @@ export default function AdminListingDetailPage() {
         <CardHeader>
           <CardTitle>{listing.title}</CardTitle>
           <p className="text-sm text-slate-500">
-            Listing #{listing.id} · Host #{host?.id ?? listing.hostId}
+            Listing #{listing.id} · Landlord #{host?.id ?? listing.hostId}
           </p>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-slate-600">
@@ -91,8 +91,8 @@ export default function AdminListingDetailPage() {
               </p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase text-slate-500">Host</p>
-              <p>{host?.fullName ?? host?.email ?? `Host #${listing.hostId}`}</p>
+              <p className="text-xs font-semibold uppercase text-slate-500">Landlord</p>
+              <p>{host?.fullName ?? host?.email ?? `Landlord #${listing.hostId}`}</p>
             </div>
           </div>
           <div className="rounded-2xl bg-slate-50 p-3">

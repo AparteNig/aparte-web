@@ -28,7 +28,7 @@ export default function AdminHostDetailPage() {
   if (Number.isNaN(hostId)) {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-rose-700">
-        Invalid host reference.
+        Invalid landlord reference.
       </div>
     );
   }
@@ -36,7 +36,7 @@ export default function AdminHostDetailPage() {
   if (hostsQuery.isLoading) {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-        Loading host details...
+        Loading landlord details...
       </div>
     );
   }
@@ -44,9 +44,9 @@ export default function AdminHostDetailPage() {
   if (!host) {
     return (
       <div className="space-y-3 rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-        <p>Host not found.</p>
+        <p>Landlord not found.</p>
         <Button type="secondary" className="rounded-2xl" onClick={() => router.push("/admin/hosts")}>
-          Back to hosts
+          Back to landlords
         </Button>
       </div>
     );
@@ -67,13 +67,13 @@ export default function AdminHostDetailPage() {
   return (
     <div className="space-y-6">
       <Button type="secondary" className="rounded-2xl" onClick={() => router.push("/admin/hosts")}>
-        ← Back to hosts
+        ← Back to landlords
       </Button>
 
       <Card className="border-slate-200">
         <CardHeader>
           <CardTitle>{host.fullName ?? host.email}</CardTitle>
-          <p className="text-sm text-slate-500">Host #{host.id}</p>
+          <p className="text-sm text-slate-500">Landlord #{host.id}</p>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-slate-600">
           <div className="grid gap-3 md:grid-cols-2">
@@ -117,7 +117,7 @@ export default function AdminHostDetailPage() {
                   disabled={approveHost.isPending}
                   onClick={handleApprove}
                 >
-                  Approve host
+                  Approve landlord
                 </Button>
                 {host.adminApprovalStatus !== "rejected" && (
                   <Button
@@ -126,7 +126,7 @@ export default function AdminHostDetailPage() {
                     disabled={rejectHost.isPending}
                     onClick={handleReject}
                   >
-                    Reject host
+                    Reject landlord
                   </Button>
                 )}
               </>
@@ -137,7 +137,7 @@ export default function AdminHostDetailPage() {
                 disabled={restoreHost.isPending}
                 onClick={handleRestore}
               >
-                Restore host
+                Restore landlord
               </Button>
             ) : (
               <Button
@@ -146,7 +146,7 @@ export default function AdminHostDetailPage() {
                 disabled={suspendHost.isPending}
                 onClick={handleSuspend}
               >
-                Suspend host
+                Suspend landlord
               </Button>
             )}
           </div>
