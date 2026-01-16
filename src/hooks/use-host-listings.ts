@@ -110,6 +110,9 @@ export const useUpdateListingMutation = (listingId?: number) => {
           | "houseRules"
           | "minNights"
           | "maxNights"
+          | "newListingPromotionPercent"
+          | "weeklyDiscountPercent"
+          | "monthlyDiscountPercent"
         >
       >,
     ) => {

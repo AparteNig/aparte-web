@@ -220,7 +220,33 @@ export const getHostListing = (listingId: number) =>
 
 export const updateHostListing = (
   listingId: number,
-  payload: Partial<Pick<HostListing, "title" | "summary" | "description" | "addressLine1" | "addressLine2" | "city" | "state" | "country" | "postalCode" | "nightlyPrice" | "cleaningFee" | "serviceFee" | "maxGuests" | "bedrooms" | "bathrooms" | "amenities" | "houseRules" | "minNights" | "maxNights">>,
+  payload: Partial<
+    Pick<
+      HostListing,
+      | "title"
+      | "summary"
+      | "description"
+      | "addressLine1"
+      | "addressLine2"
+      | "city"
+      | "state"
+      | "country"
+      | "postalCode"
+      | "nightlyPrice"
+      | "cleaningFee"
+      | "serviceFee"
+      | "maxGuests"
+      | "bedrooms"
+      | "bathrooms"
+      | "amenities"
+      | "houseRules"
+      | "minNights"
+      | "maxNights"
+      | "newListingPromotionPercent"
+      | "weeklyDiscountPercent"
+      | "monthlyDiscountPercent"
+    >
+  >,
 ) =>
   apiFetch<{ listing: HostListing }>(`/hosts/listings/${listingId}`, {
     method: "PATCH",

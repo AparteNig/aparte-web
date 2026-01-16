@@ -42,6 +42,9 @@ type ListingEditFormValues = {
   houseRules: string;
   minNights: string;
   maxNights: string;
+  newListingPromotionPercent: string;
+  weeklyDiscountPercent: string;
+  monthlyDiscountPercent: string;
 };
 
 const emptyListingForm: ListingEditFormValues = {
@@ -64,6 +67,9 @@ const emptyListingForm: ListingEditFormValues = {
   houseRules: "",
   minNights: "",
   maxNights: "",
+  newListingPromotionPercent: "0",
+  weeklyDiscountPercent: "0",
+  monthlyDiscountPercent: "0",
 };
 
 const toCommaSeparated = (items: string[] = []) => items.join(", ");
@@ -80,6 +86,12 @@ const isVideoUrl = (url: string) => {
     return /\.(mp4|mov|m4v|webm)(\?.*)?$/i.test(url);
   }
 };
+
+const DISCOUNT_LIMITS = {
+  newListingPromotionPercent: 40,
+  weeklyDiscountPercent: 50,
+  monthlyDiscountPercent: 50,
+} as const;
 
 type MediaItem = {
   id: number;
@@ -110,12 +122,30 @@ export default function HostListingDetailPage() {
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const requiresAdminApproval = profile ? profile.adminApprovalStatus !== "approved" : false;
+  const onboardingReady = Boolean(
+    profile && profile.onboardingStatus !== "draft" && profile.completedSteps.length > 0,
+  );
+  const canPublish = Boolean(onboardingReady && !requiresAdminApproval);
+  const publishDisabledReason = !canPublish
+    ? requiresAdminApproval
+      ? profile?.adminApprovalStatus === "pending"
+        ? "Awaiting admin approval before publishing."
+        : "Your profile needs admin review before publishing."
+      : "Complete onboarding requirements before publishing."
+    : null;
+
   const {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { isDirty, isSubmitting },
   } = useForm<ListingEditFormValues>({ defaultValues: emptyListingForm });
+
+  const newListingPromotionValue = watch("newListingPromotionPercent") ?? "0";
+  const weeklyDiscountValue = watch("weeklyDiscountPercent") ?? "0";
+  const monthlyDiscountValue = watch("monthlyDiscountPercent") ?? "0";
 
   const overlayTitle = publishListing.isPending
     ? "Publishing listing…"
@@ -191,6 +221,9 @@ export default function HostListingDetailPage() {
         houseRules: toCommaSeparated(listing.houseRules ?? []),
         minNights: String(listing.minNights ?? ""),
         maxNights: listing.maxNights ? String(listing.maxNights) : "",
+        newListingPromotionPercent: String(listing.newListingPromotionPercent ?? 0),
+        weeklyDiscountPercent: String(listing.weeklyDiscountPercent ?? 0),
+        monthlyDiscountPercent: String(listing.monthlyDiscountPercent ?? 0),
       });
     }
   }, [listing, reset]);
@@ -228,6 +261,9 @@ export default function HostListingDetailPage() {
         houseRules: parseCommaSeparated(values.houseRules),
         minNights: Number(values.minNights),
         maxNights: values.maxNights ? Number(values.maxNights) : null,
+        newListingPromotionPercent: Number(values.newListingPromotionPercent),
+        weeklyDiscountPercent: Number(values.weeklyDiscountPercent),
+        monthlyDiscountPercent: Number(values.monthlyDiscountPercent),
       });
       if (pendingPhotoRemovals.length > 0) {
         await Promise.all(pendingPhotoRemovals.map((photoId) => deletePhotoMutation.mutateAsync(photoId)));
@@ -758,6 +794,83 @@ export default function HostListingDetailPage() {
                     <span className="font-semibold text-slate-800">Maximum nights</span>
                     <Input type="number" min="1" {...register("maxNights")} />
                   </label>
+                  <div className="space-y-3 text-sm md:col-span-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-800">Discount offers</span>
+                      <span className="text-xs text-slate-500">Optional</span>
+                    </div>
+                    <div className="space-y-4 rounded-2xl border border-slate-200 p-4">
+                      <label className="space-y-2 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-slate-800">New listing promotion</span>
+                          <span className="text-xs font-semibold text-slate-600">
+                            {Number(newListingPromotionValue)}%
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          First bookings get a special discount to help you build reviews. Max {DISCOUNT_LIMITS.newListingPromotionPercent}%.
+                        </p>
+                        <input
+                          type="range"
+                          min="0"
+                          max={DISCOUNT_LIMITS.newListingPromotionPercent}
+                          step="1"
+                          className="w-full accent-primary"
+                          {...register("newListingPromotionPercent")}
+                        />
+                        <div className="flex items-center justify-between text-xs text-slate-400">
+                          <span>0%</span>
+                          <span>{DISCOUNT_LIMITS.newListingPromotionPercent}%</span>
+                        </div>
+                      </label>
+                      <label className="space-y-2 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-slate-800">Weekly discount</span>
+                          <span className="text-xs font-semibold text-slate-600">
+                            {Number(weeklyDiscountValue)}%
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          Applies to stays of 7 nights or more. Max {DISCOUNT_LIMITS.weeklyDiscountPercent}%.
+                        </p>
+                        <input
+                          type="range"
+                          min="0"
+                          max={DISCOUNT_LIMITS.weeklyDiscountPercent}
+                          step="1"
+                          className="w-full accent-primary"
+                          {...register("weeklyDiscountPercent")}
+                        />
+                        <div className="flex items-center justify-between text-xs text-slate-400">
+                          <span>0%</span>
+                          <span>{DISCOUNT_LIMITS.weeklyDiscountPercent}%</span>
+                        </div>
+                      </label>
+                      <label className="space-y-2 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-slate-800">Monthly discount</span>
+                          <span className="text-xs font-semibold text-slate-600">
+                            {Number(monthlyDiscountValue)}%
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          Applies to stays of 28 nights or more. Max {DISCOUNT_LIMITS.monthlyDiscountPercent}%.
+                        </p>
+                        <input
+                          type="range"
+                          min="0"
+                          max={DISCOUNT_LIMITS.monthlyDiscountPercent}
+                          step="1"
+                          className="w-full accent-primary"
+                          {...register("monthlyDiscountPercent")}
+                        />
+                        <div className="flex items-center justify-between text-xs text-slate-400">
+                          <span>0%</span>
+                          <span>{DISCOUNT_LIMITS.monthlyDiscountPercent}%</span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
                   <div className="md:col-span-2">
                     <Button
                       type="primary"
@@ -793,15 +906,3 @@ export default function HostListingDetailPage() {
     </div>
   );
 }
-  const requiresAdminApproval = profile ? profile.adminApprovalStatus !== "approved" : false;
-  const onboardingReady = Boolean(
-    profile && profile.onboardingStatus !== "draft" && profile.completedSteps.length > 0,
-  );
-  const canPublish = Boolean(onboardingReady && !requiresAdminApproval);
-  const publishDisabledReason = !canPublish
-    ? requiresAdminApproval
-      ? profile?.adminApprovalStatus === "pending"
-        ? "Awaiting admin approval before publishing."
-        : "Your profile needs admin review before publishing."
-      : "Complete onboarding requirements before publishing."
-    : null;

@@ -31,6 +31,9 @@ type ListingFormValues = {
   maxGuests: string;
   amenities: string[];
   houseRules: string[];
+  newListingPromotionPercent: string;
+  weeklyDiscountPercent: string;
+  monthlyDiscountPercent: string;
 };
 
 const initialFormValues: ListingFormValues = {
@@ -43,6 +46,9 @@ const initialFormValues: ListingFormValues = {
   maxGuests: "1",
   amenities: [],
   houseRules: [],
+  newListingPromotionPercent: "0",
+  weeklyDiscountPercent: "0",
+  monthlyDiscountPercent: "0",
 };
 
 const AMENITY_OPTIONS = [
@@ -69,6 +75,12 @@ const HOUSE_RULE_OPTIONS = [
   "Security deposit required",
 ];
 
+const DISCOUNT_LIMITS = {
+  newListingPromotionPercent: 40,
+  weeklyDiscountPercent: 50,
+  monthlyDiscountPercent: 50,
+} as const;
+
 const statusBadge = (status: HostListing["status"]) => {
   switch (status) {
     case "published":
@@ -91,13 +103,17 @@ export default function HostListingsPage() {
   const draftListing = useMoveListingToDraftMutation();
   const deleteListing = useDeleteListingMutation();
 
-  const { register, control, handleSubmit, reset } = useForm<ListingFormValues>({
+  const { register, control, handleSubmit, reset, watch } = useForm<ListingFormValues>({
     defaultValues: initialFormValues,
   });
   const [attachments, setAttachments] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [listingToDelete, setListingToDelete] = useState<{ id: number; title: string } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const newListingPromotionValue = watch("newListingPromotionPercent") ?? "0";
+  const weeklyDiscountValue = watch("weeklyDiscountPercent") ?? "0";
+  const monthlyDiscountValue = watch("monthlyDiscountPercent") ?? "0";
 
   const requiresAdminApproval = profile ? profile.adminApprovalStatus !== "approved" : false;
   const onboardingReady = Boolean(
@@ -132,6 +148,9 @@ export default function HostListingsPage() {
       if (values.houseRules.length > 0) {
         formData.set("houseRules", JSON.stringify(values.houseRules));
       }
+      formData.set("newListingPromotionPercent", values.newListingPromotionPercent);
+      formData.set("weeklyDiscountPercent", values.weeklyDiscountPercent);
+      formData.set("monthlyDiscountPercent", values.monthlyDiscountPercent);
       attachments.forEach((file) => formData.append("listingFiles", file));
       await createListing.mutateAsync(formData);
       reset(initialFormValues);
@@ -309,6 +328,83 @@ export default function HostListingsPage() {
                       />
                     )}
                   />
+                </div>
+                <div className="space-y-3 text-sm md:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-800">Discount offers</span>
+                    <span className="text-xs text-slate-500">Optional</span>
+                  </div>
+                  <div className="space-y-4 rounded-2xl border border-slate-200 p-4">
+                    <label className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-800">New listing promotion</span>
+                        <span className="text-xs font-semibold text-slate-600">
+                          {Number(newListingPromotionValue)}%
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        First bookings get a special discount to help you build reviews. Max {DISCOUNT_LIMITS.newListingPromotionPercent}%.
+                      </p>
+                      <input
+                        type="range"
+                        min="0"
+                        max={DISCOUNT_LIMITS.newListingPromotionPercent}
+                        step="1"
+                        className="w-full accent-primary"
+                        {...register("newListingPromotionPercent")}
+                      />
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>0%</span>
+                        <span>{DISCOUNT_LIMITS.newListingPromotionPercent}%</span>
+                      </div>
+                    </label>
+                    <label className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-800">Weekly discount</span>
+                        <span className="text-xs font-semibold text-slate-600">
+                          {Number(weeklyDiscountValue)}%
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Applies to stays of 7 nights or more. Max {DISCOUNT_LIMITS.weeklyDiscountPercent}%.
+                      </p>
+                      <input
+                        type="range"
+                        min="0"
+                        max={DISCOUNT_LIMITS.weeklyDiscountPercent}
+                        step="1"
+                        className="w-full accent-primary"
+                        {...register("weeklyDiscountPercent")}
+                      />
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>0%</span>
+                        <span>{DISCOUNT_LIMITS.weeklyDiscountPercent}%</span>
+                      </div>
+                    </label>
+                    <label className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-800">Monthly discount</span>
+                        <span className="text-xs font-semibold text-slate-600">
+                          {Number(monthlyDiscountValue)}%
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Applies to stays of 28 nights or more. Max {DISCOUNT_LIMITS.monthlyDiscountPercent}%.
+                      </p>
+                      <input
+                        type="range"
+                        min="0"
+                        max={DISCOUNT_LIMITS.monthlyDiscountPercent}
+                        step="1"
+                        className="w-full accent-primary"
+                        {...register("monthlyDiscountPercent")}
+                      />
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>0%</span>
+                        <span>{DISCOUNT_LIMITS.monthlyDiscountPercent}%</span>
+                      </div>
+                    </label>
+                  </div>
                 </div>
                 <div className="space-y-3 text-sm md:col-span-2">
                   <div className="flex items-center justify-between">
