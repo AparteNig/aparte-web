@@ -20,7 +20,7 @@ export default function Home() {
       <header className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
         <div className="text-lg font-semibold text-slate-900">Aparte</div>
         <Button asChild variant="secondary">
-          <Link href="/host/login">Host dashboard</Link>
+          <Link href="/host/login">Landlord dashboard</Link>
         </Button>
       </header>
 

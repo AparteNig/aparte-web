@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Button from "@/components/general/Button";
 import { Input } from "@/components/ui/input";
+import PhoneInput from "@/components/general/form/PhoneInput";
 import type { HostOnboardingStep, HostProfile } from "@/types/host";
 import { useUpdateHostProfileMutation } from "@/hooks/use-host-profile";
 import { cn } from "@/lib/utils";
@@ -59,6 +60,7 @@ export const HostSectionForm = ({ config, profile }: HostSectionFormProps) => {
 
   const {
     register,
+    control,
     handleSubmit,
     formState: { isDirty },
     reset,
@@ -160,6 +162,32 @@ export const HostSectionForm = ({ config, profile }: HostSectionFormProps) => {
                     <p className="text-xs text-slate-500">
                       {field.helperText}
                     </p>
+                  )}
+                </label>
+              );
+            }
+
+            if (field.type === "tel") {
+              return (
+                <label key={field.name as string} className="block space-y-2">
+                  <span className="font-medium">{field.label}</span>
+                  <Controller
+                    name={field.name as string}
+                    control={control}
+                    rules={{ required: field.required }}
+                    render={({ field: controllerField }) => (
+                      <PhoneInput
+                        name={controllerField.name}
+                        value={controllerField.value}
+                        onChange={controllerField.onChange}
+                        onBlur={controllerField.onBlur}
+                        ref={controllerField.ref}
+                        placeholder={field.placeholder ?? "801 234 5678"}
+                      />
+                    )}
+                  />
+                  {field.helperText && (
+                    <p className="text-xs text-slate-500">{field.helperText}</p>
                   )}
                 </label>
               );

@@ -50,6 +50,9 @@ export type HostListing = {
   houseRules: string[];
   minNights: number;
   maxNights: number | null;
+  newListingPromotionPercent: number;
+  weeklyDiscountPercent: number;
+  monthlyDiscountPercent: number;
   status: ListingStatus;
   reviewNotes: string;
   publishedAt: string | null;

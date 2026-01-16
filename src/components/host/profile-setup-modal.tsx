@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 
 import Button from "@/components/general/Button";
 import LoadingOverlay from "@/components/general/LoadingOverlay";
 import Modal from "@/components/general/ui/modal/Modal";
 import { Input } from "@/components/ui/input";
+import PhoneInput from "@/components/general/form/PhoneInput";
 import { useUpdateHostProfileMutation, useUploadHostAvatarMutation } from "@/hooks/use-host-profile";
 import type { HostProfile } from "@/types/host";
 
@@ -48,6 +49,7 @@ export const ProfileSetupModal = ({ open, profile }: ProfileSetupModalProps) => 
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { isSubmitting },
@@ -123,7 +125,7 @@ export const ProfileSetupModal = ({ open, profile }: ProfileSetupModalProps) => 
         <div className="space-y-4 text-slate-800">
           <div className="space-y-2 text-center">
             <p className="text-xs uppercase tracking-[0.3em] text-primary">Profile setup</p>
-            <h2 className="text-2xl font-semibold text-slate-900">Let’s complete your hosting profile</h2>
+            <h2 className="text-2xl font-semibold text-slate-900">Let’s complete your landlord profile</h2>
             <p className="text-sm text-slate-500">
               We need a few details before unlocking your dashboard. This helps us auto-fill your onboarding tasks.
             </p>
@@ -139,7 +141,20 @@ export const ProfileSetupModal = ({ open, profile }: ProfileSetupModalProps) => 
             </label>
             <label className="space-y-2 md:col-span-1">
               <span className="font-semibold">Phone number</span>
-              <Input placeholder="+2348012345678" {...register("phone", { required: true })} />
+              <Controller
+                name="phone"
+                control={control}
+                rules={{ required: true }}
+                render={({ field }) => (
+                  <PhoneInput
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    ref={field.ref}
+                    placeholder="801 234 5678"
+                  />
+                )}
+              />
             </label>
             <label className="space-y-2 md:col-span-1">
               <span className="font-semibold">Country</span>
@@ -162,7 +177,7 @@ export const ProfileSetupModal = ({ open, profile }: ProfileSetupModalProps) => 
               <textarea
                 className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 rows={3}
-                placeholder="Share your hosting story or what makes your spaces unique."
+                placeholder="Share your landlord story or what makes your spaces unique."
                 {...register("bio")}
               />
             </label>

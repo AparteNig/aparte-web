@@ -28,7 +28,7 @@ const PROFILE_SECTIONS: HostSectionConfig[] = [
         name: "bio",
         label: "About you",
         type: "textarea",
-        helperText: "Highlight your hosting experience or brand story.",
+        helperText: "Highlight your landlord experience or brand story.",
       },
     ],
   },
@@ -154,7 +154,7 @@ export default function HostProfilePage() {
   if (isLoading) {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-500">
-        Loading host profile...
+        Loading landlord profile...
       </div>
     );
   }
@@ -162,7 +162,7 @@ export default function HostProfilePage() {
   if (isError || !data) {
     return (
       <div className="space-y-4 rounded-3xl border border-red-200 bg-red-50 p-8 text-sm text-red-700">
-        <p>We couldn’t load your host profile.</p>
+        <p>We couldn’t load your landlord profile.</p>
         <p className="text-xs">
           {error instanceof Error ? error.message : "Unexpected error"}
         </p>

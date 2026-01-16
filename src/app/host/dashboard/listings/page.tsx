@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 
 import { Input } from "@/components/ui/input";
 import Button from "@/components/general/Button";
@@ -19,6 +19,7 @@ import {
 } from "@/hooks/use-host-listings";
 import type { HostListing } from "@/types/listing";
 import { cn } from "@/lib/utils";
+import PillMultiSelect from "@/components/general/form/PillMultiSelect";
 
 type ListingFormValues = {
   title: string;
@@ -28,8 +29,11 @@ type ListingFormValues = {
   country: string;
   nightlyPrice: string;
   maxGuests: string;
-  amenities: string;
-  houseRules: string;
+  amenities: string[];
+  houseRules: string[];
+  newListingPromotionPercent: string;
+  weeklyDiscountPercent: string;
+  monthlyDiscountPercent: string;
 };
 
 const initialFormValues: ListingFormValues = {
@@ -40,15 +44,42 @@ const initialFormValues: ListingFormValues = {
   country: "Nigeria",
   nightlyPrice: "",
   maxGuests: "1",
-  amenities: "",
-  houseRules: "",
+  amenities: [],
+  houseRules: [],
+  newListingPromotionPercent: "0",
+  weeklyDiscountPercent: "0",
+  monthlyDiscountPercent: "0",
 };
 
-const parseCommaSeparated = (value: string) =>
-  value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
+const AMENITY_OPTIONS = [
+  "WiFi",
+  "Generator",
+  "Backup power",
+  "Air conditioning",
+  "Smart TV",
+  "Workspace",
+  "Pool",
+  "Gym",
+  "Parking",
+  "Laundry",
+  "Security",
+];
+
+const HOUSE_RULE_OPTIONS = [
+  "No smoking",
+  "No parties",
+  "Quiet hours after 10pm",
+  "No pets",
+  "Self check-in",
+  "Government ID required",
+  "Security deposit required",
+];
+
+const DISCOUNT_LIMITS = {
+  newListingPromotionPercent: 40,
+  weeklyDiscountPercent: 50,
+  monthlyDiscountPercent: 50,
+} as const;
 
 const statusBadge = (status: HostListing["status"]) => {
   switch (status) {
@@ -72,7 +103,7 @@ export default function HostListingsPage() {
   const draftListing = useMoveListingToDraftMutation();
   const deleteListing = useDeleteListingMutation();
 
-  const { register, handleSubmit, reset } = useForm<ListingFormValues>({
+  const { register, control, handleSubmit, reset, watch } = useForm<ListingFormValues>({
     defaultValues: initialFormValues,
   });
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -80,21 +111,46 @@ export default function HostListingsPage() {
   const [listingToDelete, setListingToDelete] = useState<{ id: number; title: string } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const canPublish = Boolean(
+  const newListingPromotionValue = watch("newListingPromotionPercent") ?? "0";
+  const weeklyDiscountValue = watch("weeklyDiscountPercent") ?? "0";
+  const monthlyDiscountValue = watch("monthlyDiscountPercent") ?? "0";
+
+  const requiresAdminApproval = profile ? profile.adminApprovalStatus !== "approved" : false;
+  const onboardingReady = Boolean(
     profile && profile.onboardingStatus !== "draft" && profile.completedSteps.length > 0,
   );
+  const canPublish = Boolean(onboardingReady && !requiresAdminApproval);
+  const publishBlockedMessage = requiresAdminApproval
+    ? profile?.adminApprovalStatus === "pending"
+      ? "Awaiting admin approval before publishing."
+      : "Contact support to resolve the admin review before publishing."
+    : "Finish onboarding in the profile tab to enable publishing.";
 
   const onSubmit = handleSubmit(async (values) => {
     try {
       setFormError(null);
       const formData = new FormData();
-      Object.entries(values).forEach(([key, value]) => formData.append(key, value));
-      if (values.amenities) {
-        formData.set("amenities", JSON.stringify(parseCommaSeparated(values.amenities)));
+      const baseFields: Array<keyof ListingFormValues> = [
+        "title",
+        "description",
+        "addressLine1",
+        "city",
+        "country",
+        "nightlyPrice",
+        "maxGuests",
+      ];
+      baseFields.forEach((field) => {
+        formData.append(field, values[field]);
+      });
+      if (values.amenities.length > 0) {
+        formData.set("amenities", JSON.stringify(values.amenities));
       }
-      if (values.houseRules) {
-        formData.set("houseRules", JSON.stringify(parseCommaSeparated(values.houseRules)));
+      if (values.houseRules.length > 0) {
+        formData.set("houseRules", JSON.stringify(values.houseRules));
       }
+      formData.set("newListingPromotionPercent", values.newListingPromotionPercent);
+      formData.set("weeklyDiscountPercent", values.weeklyDiscountPercent);
+      formData.set("monthlyDiscountPercent", values.monthlyDiscountPercent);
       attachments.forEach((file) => formData.append("listingFiles", file));
       await createListing.mutateAsync(formData);
       reset(initialFormValues);
@@ -154,7 +210,7 @@ export default function HostListingsPage() {
           <div>
             <h3 className="text-2xl font-semibold">Your listings</h3>
             <p className="text-sm text-slate-600">
-              Drafts stay private until you hit publish. Publishing requires onboarding completion.
+              Drafts stay private until you hit publish. Publishing requires onboarding completion and admin approval.
             </p>
             <div className="mt-2 flex flex-wrap gap-3 text-xs">
               {["all", "draft", "published"].map((option) => (
@@ -237,14 +293,119 @@ export default function HostListingsPage() {
                   <span className="font-semibold text-slate-800">Max guests</span>
                   <Input type="number" min="1" {...register("maxGuests", { required: true })} />
                 </label>
-                <label className="space-y-2 text-sm md:col-span-2">
-                  <span className="font-semibold text-slate-800">Amenities (comma separated)</span>
-                  <Input placeholder="WiFi, Generator, Pool" {...register("amenities")} />
-                </label>
-                <label className="space-y-2 text-sm md:col-span-2">
-                  <span className="font-semibold text-slate-800">House rules (comma separated)</span>
-                  <Input placeholder="No smoking, Quiet hours after 10pm" {...register("houseRules")} />
-                </label>
+                <div className="space-y-2 text-sm md:col-span-2">
+                  <Controller
+                    name="amenities"
+                    control={control}
+                    render={({ field }) => (
+                      <PillMultiSelect
+                        label="Amenities"
+                        helperText="Tap to toggle amenities or add your own."
+                        options={AMENITY_OPTIONS}
+                        selected={field.value ?? []}
+                        onChange={field.onChange}
+                        allowCustom
+                        customPlaceholder="Add amenity"
+                        addButtonLabel="Add amenity"
+                      />
+                    )}
+                  />
+                </div>
+                <div className="space-y-2 text-sm md:col-span-2">
+                  <Controller
+                    name="houseRules"
+                    control={control}
+                    render={({ field }) => (
+                      <PillMultiSelect
+                        label="House rules"
+                        helperText="Select common rules or create custom guidance."
+                        options={HOUSE_RULE_OPTIONS}
+                        selected={field.value ?? []}
+                        onChange={field.onChange}
+                        allowCustom
+                        customPlaceholder="Add rule"
+                        addButtonLabel="Add rule"
+                      />
+                    )}
+                  />
+                </div>
+                <div className="space-y-3 text-sm md:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-800">Discount offers</span>
+                    <span className="text-xs text-slate-500">Optional</span>
+                  </div>
+                  <div className="space-y-4 rounded-2xl border border-slate-200 p-4">
+                    <label className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-800">New listing promotion</span>
+                        <span className="text-xs font-semibold text-slate-600">
+                          {Number(newListingPromotionValue)}%
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        First bookings get a special discount to help you build reviews. Max {DISCOUNT_LIMITS.newListingPromotionPercent}%.
+                      </p>
+                      <input
+                        type="range"
+                        min="0"
+                        max={DISCOUNT_LIMITS.newListingPromotionPercent}
+                        step="1"
+                        className="w-full accent-primary"
+                        {...register("newListingPromotionPercent")}
+                      />
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>0%</span>
+                        <span>{DISCOUNT_LIMITS.newListingPromotionPercent}%</span>
+                      </div>
+                    </label>
+                    <label className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-800">Weekly discount</span>
+                        <span className="text-xs font-semibold text-slate-600">
+                          {Number(weeklyDiscountValue)}%
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Applies to stays of 7 nights or more. Max {DISCOUNT_LIMITS.weeklyDiscountPercent}%.
+                      </p>
+                      <input
+                        type="range"
+                        min="0"
+                        max={DISCOUNT_LIMITS.weeklyDiscountPercent}
+                        step="1"
+                        className="w-full accent-primary"
+                        {...register("weeklyDiscountPercent")}
+                      />
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>0%</span>
+                        <span>{DISCOUNT_LIMITS.weeklyDiscountPercent}%</span>
+                      </div>
+                    </label>
+                    <label className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-800">Monthly discount</span>
+                        <span className="text-xs font-semibold text-slate-600">
+                          {Number(monthlyDiscountValue)}%
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Applies to stays of 28 nights or more. Max {DISCOUNT_LIMITS.monthlyDiscountPercent}%.
+                      </p>
+                      <input
+                        type="range"
+                        min="0"
+                        max={DISCOUNT_LIMITS.monthlyDiscountPercent}
+                        step="1"
+                        className="w-full accent-primary"
+                        {...register("monthlyDiscountPercent")}
+                      />
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>0%</span>
+                        <span>{DISCOUNT_LIMITS.monthlyDiscountPercent}%</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
                 <div className="space-y-3 text-sm md:col-span-2">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-800">Photos / videos</span>
@@ -381,11 +542,13 @@ export default function HostListingsPage() {
                       Delete
                     </Button>
                   </div>
-                  {!canPublish && (
+                  {listing.status === "pending_review" ? (
                     <p className="text-xs text-amber-700">
-                      Finish onboarding in the profile tab to enable publishing.
+                      Listing awaiting admin approval. You&apos;ll be notified once it&apos;s live.
                     </p>
-                  )}
+                  ) : !canPublish ? (
+                    <p className="text-xs text-amber-700">{publishBlockedMessage}</p>
+                  ) : null}
                 </CardContent>
               </Card>
             ))}
