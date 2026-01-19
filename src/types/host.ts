@@ -16,6 +16,8 @@ export type HostOnboardingStep =
   | "SUPPORT_CONTACT"
   | "LISTING_PUBLISHED";
 
+export type HostApprovalStatus = "pending" | "approved" | "rejected";
+
 export type HostProfile = {
   id: number;
   email: string;
@@ -54,6 +56,8 @@ export type HostProfile = {
   payoutVerified: boolean;
   isSuspended: boolean;
   onboardingNotes: string;
+  adminApprovalStatus: HostApprovalStatus;
+  approvedAt: string | null;
 };
 
 export const HOST_ONBOARDING_STEPS: HostOnboardingStep[] = [

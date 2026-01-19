@@ -45,7 +45,7 @@ export default function HostDashboardLayout({
       <ProfileSetupModal open={needsProfileSetup} profile={data} />
       <DashboardShell
         navItems={navItems}
-        title={isOverview ? "Host Workspace" : undefined}
+        title={isOverview ? "Landlord Workspace" : undefined}
         subtitle={isOverview ? "Track occupancy, revenue, and guest messages." : undefined}
         logoutHref="/host/login"
         cookieName={HOST_AUTH_COOKIE}

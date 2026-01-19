@@ -30,7 +30,7 @@ export const ResponsiveGate = ({ minWidth = 1024, children }: ResponsiveGateProp
         <div className="max-w-md space-y-3">
           <p className="text-2xl font-semibold text-slate-900">Screen too small</p>
           <p className="text-sm">
-            The host dashboard is optimized for larger displays. Please switch to a tablet or
+            The landlord dashboard is optimized for larger displays. Please switch to a tablet or
             desktop device to continue.
           </p>
         </div>

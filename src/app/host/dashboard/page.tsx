@@ -79,7 +79,7 @@ export default function HostDashboardPage() {
   if (isLoading) {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-500">
-        Loading your host overview...
+        Loading your landlord overview...
       </div>
     );
   }
@@ -87,7 +87,7 @@ export default function HostDashboardPage() {
   if (isError || !data) {
     return (
       <div className="space-y-4 rounded-3xl border border-red-200 bg-red-50 p-8 text-sm text-red-700">
-        <p>We couldn’t load your host data.</p>
+        <p>We couldn’t load your landlord data.</p>
         <p className="text-xs">
           {error instanceof Error ? error.message : "Unexpected error"}
         </p>
@@ -101,7 +101,6 @@ export default function HostDashboardPage() {
       </div>
     );
   }
-  console.log(data.incompleteSteps);
   const formatStatus = (status: HostOnboardingStatus) => {
     if (status === "identity_pending") {
       if (
@@ -125,6 +124,8 @@ export default function HostDashboardPage() {
   const completedSteps = data.completedSteps.length;
   const onboardingPercent = Math.round((completedSteps / totalSteps) * 100);
   const needsSetup = data.incompleteSteps.length > 0;
+  const awaitingAdminApproval = data.adminApprovalStatus === "pending";
+  const adminRejected = data.adminApprovalStatus === "rejected";
   const isActive = data.onboardingStatus === "active";
   const activeListingCount =
     listingsData?.filter((listing) => listing.status === "published").length ?? 0;
@@ -133,6 +134,28 @@ export default function HostDashboardPage() {
 
   return (
     <div className="space-y-8">
+      {awaitingAdminApproval && (
+        <div className="flex flex-col gap-3 rounded-3xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900 md:flex-row md:items-center md:justify-between">
+          <div>
+            Your profile is awaiting admin approval. Listings will remain private until a reviewer
+            finishes the compliance check.
+          </div>
+          <p className="text-xs text-amber-800">
+            You can keep editing your profile and listings in the meantime.
+          </p>
+        </div>
+      )}
+      {adminRejected && (
+        <div className="flex flex-col gap-3 rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 md:flex-row md:items-center md:justify-between">
+          <div>
+            Your profile needs attention before it can go live. Please review the notes in the
+            profile tab and resubmit the required documents.
+          </div>
+          <Link href="/host/dashboard/profile" className="text-sm font-semibold text-rose-800 underline">
+            Review feedback
+          </Link>
+        </div>
+      )}
       {needsSetup && (
         <div className="flex flex-col gap-3 rounded-3xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900 md:flex-row md:items-center md:justify-between">
           <div>

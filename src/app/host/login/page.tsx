@@ -140,7 +140,7 @@ export default function HostLoginPage() {
   return (
     <AuthLayout containerClassName="flex flex-col gap-8">
       <AuthHeader
-        title="Host Workspace login"
+        title="Landlord Workspace login"
         subtitle="Log in to manage listings, guests, and payouts in minutes."
       />
       {error && (
@@ -176,7 +176,7 @@ export default function HostLoginPage() {
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
           <InputField
             label="Email address"
-            placeholder="host@aparte.com"
+            placeholder="landlord@aparte.com"
             LeftIcon={EmailIcon}
             {...register("email", { required: "Email is required" })}
             error={errors.email?.message}
@@ -204,7 +204,7 @@ export default function HostLoginPage() {
       <p className="text-center text-sm text-slate-600">
         Need to onboard?{" "}
         <Link href="/host/signup" className="font-semibold text-primary">
-          Create host account
+          Create landlord account
         </Link>
       </p>
       <PageFooter />

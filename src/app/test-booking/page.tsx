@@ -112,7 +112,7 @@ export default function TestBookingPage() {
       setLastBooking(booking);
       setFormError(null);
       console.info(
-        `[test-booking] notifying host ${booking.hostId} of booking #${booking.id}`,
+        `[test-booking] notifying landlord ${booking.hostId} of booking #${booking.id}`,
         booking,
       );
       invalidateBookings();
@@ -171,7 +171,7 @@ export default function TestBookingPage() {
 
   const finalizeBookingMutation = useMutation({
     mutationFn: (bookingId: number) => completeCustomerBooking(bookingId),
-    onMutate: () => showOverlay("Completing booking...", "Releasing payout to host wallet."),
+    onMutate: () => showOverlay("Completing booking...", "Releasing payout to landlord wallet."),
     onSuccess: ({ booking }) => {
       console.info(`[test-booking] booking #${booking.id} completed`);
       invalidateBookings();
@@ -489,7 +489,7 @@ export default function TestBookingPage() {
               )}
               {lastBooking && (
                 <span className="text-sm text-slate-500">
-                  Booking #{lastBooking.id} confirmed. Check the host dashboard for updates.
+                  Booking #{lastBooking.id} confirmed. Check the landlord dashboard for updates.
                 </span>
               )}
             </div>
@@ -501,7 +501,7 @@ export default function TestBookingPage() {
         <CardHeader>
           <CardTitle>Test complete booking</CardTitle>
           <p className="text-sm text-slate-500">
-            Requires an authenticated host session. Use the buttons below to move bookings through
+            Requires an authenticated landlord session. Use the buttons below to move bookings through
             the lifecycle and ensure earnings update.
           </p>
         </CardHeader>
@@ -510,13 +510,13 @@ export default function TestBookingPage() {
             <p className="text-sm text-red-600">
               {bookingsQuery.error instanceof Error
                 ? bookingsQuery.error.message
-                : "Failed to load host bookings. Log in as a host to continue."}
+                : "Failed to load landlord bookings. Log in as a landlord to continue."}
             </p>
           )}
           {bookingsQuery.isLoading ? (
             <p className="text-sm text-slate-500">Loading bookings...</p>
           ) : bookings.length === 0 ? (
-            <p className="text-sm text-slate-500">No host bookings yet.</p>
+            <p className="text-sm text-slate-500">No landlord bookings yet.</p>
           ) : (
             <div className="space-y-4">
               {[
