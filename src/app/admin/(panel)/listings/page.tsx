@@ -44,8 +44,9 @@ export default function AdminListingsPage() {
   const [reviewNotes, setReviewNotes] = useState("");
   const rejectingListingId =
     rejectListing.isPending && rejectListing.variables ? rejectListing.variables.listingId : null;
-  const modalSubmitting =
-    rejectModalListing && rejectingListingId === rejectModalListing.id && rejectListing.isPending;
+  const modalSubmitting = Boolean(
+    rejectModalListing && rejectingListingId === rejectModalListing.id && rejectListing.isPending,
+  );
   const statusOptions = ["all", "pending_review", "published", "suspended", "draft"] as const;
   const filteredListings = useMemo(() => {
     if (!listingsQuery.data) return [];
