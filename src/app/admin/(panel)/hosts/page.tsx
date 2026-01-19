@@ -51,10 +51,12 @@ export default function AdminHostsPage() {
     restoreHost.isPending && typeof restoreHost.variables === "number"
       ? restoreHost.variables
       : null;
-  const modalSubmitting =
-    rejectModalHost && rejectingHostId === rejectModalHost.id && rejectHost.isPending;
-  const suspendModalSubmitting =
-    suspendModalHost && suspendingHostId === suspendModalHost.id && suspendHost.isPending;
+  const modalSubmitting = Boolean(
+    rejectModalHost && rejectingHostId === rejectModalHost.id && rejectHost.isPending,
+  );
+  const suspendModalSubmitting = Boolean(
+    suspendModalHost && suspendingHostId === suspendModalHost.id && suspendHost.isPending,
+  );
 
   const hosts = useMemo(() => {
     if (!hostsQuery.data) {
@@ -143,10 +145,7 @@ export default function AdminHostsPage() {
           <div className="mt-4 overflow-auto">
             <table className="w-full text-left text-sm text-slate-600">
               <thead className="text-xs uppercase text-slate-500">
-                <tr
-                  className="cursor-pointer transition hover:bg-slate-50"
-                  onClick={() => router.push(`/admin/hosts/${host.id}`)}
-                >
+                <tr className="transition">
                   <th className="pb-2">Landlord</th>
                   <th className="pb-2">Status</th>
                   <th className="pb-2">Onboarding</th>

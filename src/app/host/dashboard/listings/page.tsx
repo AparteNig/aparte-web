@@ -140,7 +140,7 @@ export default function HostListingsPage() {
         "maxGuests",
       ];
       baseFields.forEach((field) => {
-        formData.append(field, values[field]);
+        formData.append(field, String(values[field] ?? ""));
       });
       if (values.amenities.length > 0) {
         formData.set("amenities", JSON.stringify(values.amenities));
