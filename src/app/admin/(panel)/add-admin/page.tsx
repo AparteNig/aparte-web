@@ -35,9 +35,12 @@ const defaults: InviteAdminForm = {
 export default function AddAdminPage() {
   const profileQuery = useAdminProfileQuery(true);
   const inviteAdmin = useInviteAdminMutation();
-  const [successInfo, setSuccessInfo] = useState<{ email: string; expiresAt: string; token?: string } | null>(
-    null,
-  );
+  const [successInfo, setSuccessInfo] = useState<{
+    email: string;
+    expiresAt: string;
+    token?: string;
+    devEmailPreview?: { to: string; subject: string; body: string };
+  } | null>(null);
   const [showTokenModal, setShowTokenModal] = useState(false);
 
   const {
