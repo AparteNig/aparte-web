@@ -11,13 +11,14 @@ type HostBookingsResponse = {
   summary: HostBookingsSummary;
 };
 
-export const useHostBookingsQuery = () =>
+export const useHostBookingsQuery = (enabled = true) =>
   useQuery<HostBookingsResponse>({
     queryKey: hostBookingsQueryKey,
     queryFn: async () => {
       const data = await getHostBookings();
       return { bookings: data.bookings, summary: data.summary };
     },
+    enabled,
   });
 
 export const useCompleteBookingMutation = () => {

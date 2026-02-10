@@ -17,7 +17,7 @@ import type { HostListing, HostListingDetail, ListingPhotoPayload } from "@/type
 export const hostListingsQueryKey = ["hostListings"];
 export const hostListingQueryKey = (listingId: number) => ["hostListing", listingId];
 
-export const useHostListingsQuery = () =>
+export const useHostListingsQuery = (enabled = true) =>
   useQuery<HostListing[]>({
     queryKey: hostListingsQueryKey,
     queryFn: async () => {
@@ -27,6 +27,7 @@ export const useHostListingsQuery = () =>
     staleTime: 1000 * 60 * 5,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
+    enabled,
   });
 
 export const useCreateListingMutation = () => {

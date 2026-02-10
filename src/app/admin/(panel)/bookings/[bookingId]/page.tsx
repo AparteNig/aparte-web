@@ -69,13 +69,22 @@ export default function AdminBookingDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Button
-        type="secondary"
-        className="rounded-2xl"
-        onClick={() => router.push("/admin/bookings")}
-      >
-        ← Back to bookings
-      </Button>
+      <div className="flex flex-wrap gap-3">
+        <Button
+          type="secondary"
+          className="rounded-2xl"
+          onClick={() => router.push("/admin/bookings")}
+        >
+          ← Back to bookings
+        </Button>
+        <Button
+          type="primary"
+          className="rounded-2xl"
+          onClick={() => router.push(`/admin/messages?bookingId=${booking.id}`)}
+        >
+          Open chat
+        </Button>
+      </div>
 
       <Card className="border-slate-200">
         <CardHeader>

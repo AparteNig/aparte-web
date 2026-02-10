@@ -10,6 +10,7 @@ const navItems: NavItem[] = [
   { label: "Listings", href: "/admin/listings", icon: "listings" },
   { label: "Bookings", href: "/admin/bookings", icon: "bookings" },
   { label: "Payouts", href: "/admin/payouts", icon: "payouts" },
+  { label: "Messages", href: "/admin/messages", icon: "messages" },
   { label: "All admins", href: "/admin/admins", icon: "users", requiresSuperAdmin: true },
   { label: "Add admin", href: "/admin/add-admin", icon: "users", requiresSuperAdmin: true },
   { label: "Audit logs", href: "/admin/audit-logs", icon: "alerts" }

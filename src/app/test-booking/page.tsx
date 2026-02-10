@@ -1,19 +1,23 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import Button from "@/components/general/Button";
 import LoadingOverlay from "@/components/general/LoadingOverlay";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { getAuthCookie, HOST_AUTH_COOKIE } from "@/lib/auth";
 import {
   checkInCustomerBooking,
   completeCustomerBooking,
-  createCustomerBooking,
+  createCustomerBookingWithToken,
   guestCheckoutCustomerBooking,
+  getPublicListings,
+  loginUserRequest,
   markBookingCheckoutDue,
   type CreateCustomerBookingPayload,
+  verifyOtpRequest,
 } from "@/lib/api-client";
 import { hostBookingsQueryKey, useHostBookingsQuery } from "@/hooks/use-bookings";
 import { useHostListingsQuery } from "@/hooks/use-host-listings";
@@ -34,6 +38,9 @@ const isDateBetween = (date: string, start: string, end: string) => {
   return target >= new Date(start).getTime() && target <= new Date(end).getTime();
 };
 
+const USER_TOKEN_KEY = "aparte_test_booking_user_token";
+const USER_EMAIL_KEY = "aparte_test_booking_user_email";
+
 export default function TestBookingPage() {
   const [formState, setFormState] = useState(initialFormState);
   const [lastBooking, setLastBooking] = useState<HostBooking | null>(null);
@@ -41,15 +48,39 @@ export default function TestBookingPage() {
   const queryClient = useQueryClient();
   const [overlayState, setOverlayState] = useState<{ title: string; message: string } | null>(null);
   const [alertModal, setAlertModal] = useState<{ title: string; message: string } | null>(null);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginPending, setLoginPending] = useState(false);
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpId, setOtpId] = useState<number | null>(null);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpPreview, setOtpPreview] = useState<string | null>(null);
+  const [userToken, setUserToken] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [hasHostToken, setHasHostToken] = useState(false);
 
-  const bookingsQuery = useHostBookingsQuery();
-  const { data: listings = [] } = useHostListingsQuery();
+  const bookingsQuery = useHostBookingsQuery(hasHostToken);
+  const { data: hostListings = [] } = useHostListingsQuery(hasHostToken);
+  const publicListingsQuery = useQuery({
+    queryKey: ["publicListings"],
+    queryFn: async () => {
+      const data = await getPublicListings();
+      return data.listings;
+    },
+    enabled: !hasHostToken,
+    staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
+  });
+  const listings = hasHostToken ? hostListings : publicListingsQuery.data ?? [];
   const publishedListings = useMemo(
     () => listings.filter((listing) => listing.status === "published"),
     [listings],
   );
 
   const [selectedListingId, setSelectedListingId] = useState<number | undefined>(undefined);
+  const [manualListingId, setManualListingId] = useState("");
   const [month, setMonth] = useState<string>(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -61,6 +92,15 @@ export default function TestBookingPage() {
       setSelectedListingId(publishedListings[0].id);
     }
   }, [publishedListings, selectedListingId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storedToken = window.localStorage.getItem(USER_TOKEN_KEY);
+    const storedEmail = window.localStorage.getItem(USER_EMAIL_KEY);
+    if (storedToken) setUserToken(storedToken);
+    if (storedEmail) setUserEmail(storedEmail);
+    setHasHostToken(Boolean(getAuthCookie(HOST_AUTH_COOKIE)));
+  }, []);
 
   const selectedListing = useMemo(
     () => publishedListings.find((listing) => listing.id === selectedListingId),
@@ -103,7 +143,12 @@ export default function TestBookingPage() {
   const showAlert = (title: string, message: string) => setAlertModal({ title, message });
 
   const createBookingMutation = useMutation({
-    mutationFn: (payload: CreateCustomerBookingPayload) => createCustomerBooking(payload),
+    mutationFn: (payload: CreateCustomerBookingPayload) => {
+      if (!userToken) {
+        throw new Error("Log in as a user to create a test booking.");
+      }
+      return createCustomerBookingWithToken(payload, userToken);
+    },
     onMutate: () =>
       showOverlay("Creating booking...", "Calling the demo customer booking endpoint."),
     onSuccess: ({ booking }) => {
@@ -208,7 +253,14 @@ export default function TestBookingPage() {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedListingId) {
-      setFormError("Select a listing to create a test booking.");
+      if (!manualListingId) {
+        setFormError("Select a listing or enter a listing ID to create a test booking.");
+        return;
+      }
+    }
+    if (!userToken) {
+      setFormError("Log in as a user to create a test booking.");
+      setLoginOpen(true);
       return;
     }
     if (!formState.guestName || !dateRange.start || !dateRange.end) {
@@ -217,7 +269,7 @@ export default function TestBookingPage() {
     }
 
     const payload: CreateCustomerBookingPayload = {
-      listingId: selectedListingId,
+      listingId: selectedListingId ?? Number(manualListingId),
       guestName: formState.guestName,
       startDate: dateRange.start,
       endDate: dateRange.end,
@@ -232,7 +284,7 @@ export default function TestBookingPage() {
   };
 
   const canSubmit = Boolean(
-    selectedListingId && formState.guestName && dateRange.start && dateRange.end,
+    (selectedListingId || manualListingId) && formState.guestName && dateRange.start && dateRange.end,
   );
 
   const lifecycleBusy =
@@ -293,6 +345,79 @@ export default function TestBookingPage() {
     return null;
   };
 
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoginError(null);
+    if (!loginEmail || !loginPassword) {
+      setLoginError("Email and password are required.");
+      return;
+    }
+    setLoginPending(true);
+    try {
+      const response = await loginUserRequest({ email: loginEmail, password: loginPassword });
+      if (response.requiresOtp) {
+        setOtpStep(true);
+        setOtpId(response.otpId);
+        setOtpPreview(response.devPreview ?? null);
+        setLoginPassword("");
+        return;
+      }
+      setUserToken(response.tokens.accessToken);
+      setUserEmail(loginEmail);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(USER_TOKEN_KEY, response.tokens.accessToken);
+        window.localStorage.setItem(USER_EMAIL_KEY, loginEmail);
+      }
+      setLoginPassword("");
+      setLoginOpen(false);
+      showAlert("Logged in", "User session saved for test bookings.");
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "Failed to log in.");
+    } finally {
+      setLoginPending(false);
+    }
+  };
+
+  const handleOtpVerify = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoginError(null);
+    if (!otpId || !otpCode) {
+      setLoginError("OTP code is required.");
+      return;
+    }
+    setLoginPending(true);
+    try {
+      const response = await verifyOtpRequest({ otpId, code: otpCode });
+      setUserToken(response.tokens.accessToken);
+      if (loginEmail) setUserEmail(loginEmail);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(USER_TOKEN_KEY, response.tokens.accessToken);
+        if (loginEmail) window.localStorage.setItem(USER_EMAIL_KEY, loginEmail);
+      }
+      setOtpCode("");
+      setOtpId(null);
+      setOtpStep(false);
+      setOtpPreview(null);
+      setLoginPassword("");
+      setLoginOpen(false);
+      showAlert("Logged in", "User session saved for test bookings.");
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "Failed to verify OTP.");
+    } finally {
+      setLoginPending(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setUserToken(null);
+    setUserEmail(null);
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(USER_TOKEN_KEY);
+      window.localStorage.removeItem(USER_EMAIL_KEY);
+    }
+    showAlert("Logged out", "User session cleared.");
+  };
+
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8 p-6">
       {overlayState && (
@@ -304,7 +429,27 @@ export default function TestBookingPage() {
       )}
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase text-slate-500">Internal tooling</p>
-        <h1 className="text-3xl font-semibold text-slate-900">Test booking simulator</h1>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h1 className="text-3xl font-semibold text-slate-900">Test booking simulator</h1>
+          {userToken ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-xs text-slate-500">
+                Logged in as {userEmail ?? "user"}
+              </span>
+              <Button type="secondary" className="rounded-2xl px-4 py-2 text-sm" onClick={handleLogout}>
+                Log out
+              </Button>
+            </div>
+          ) : (
+            <Button
+              type="primary"
+              className="rounded-2xl px-4 py-2 text-sm"
+              onClick={() => setLoginOpen(true)}
+            >
+              Log in
+            </Button>
+          )}
+        </div>
         <p className="text-sm text-slate-600">
           Use this page to create demo bookings, trigger lifecycle changes, and verify that the host
           dashboard updates as expected.
@@ -324,20 +469,35 @@ export default function TestBookingPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <label className="text-sm font-medium text-slate-600">
                 Listing
-                <select
-                  className="mt-1 w-full rounded-2xl border border-slate-200 p-3"
-                  value={selectedListingId ?? ""}
-                  onChange={(event) =>
-                    setSelectedListingId(event.target.value ? Number(event.target.value) : undefined)
-                  }
-                >
-                  {publishedListings.length === 0 && <option value="">No published listings</option>}
-                  {publishedListings.map((listing) => (
-                    <option key={listing.id} value={listing.id}>
-                      {listing.title}
-                    </option>
-                  ))}
-                </select>
+                {publishedListings.length > 0 ? (
+                  <select
+                    className="mt-1 w-full rounded-2xl border border-slate-200 p-3"
+                    value={selectedListingId ?? ""}
+                    onChange={(event) =>
+                      setSelectedListingId(
+                        event.target.value ? Number(event.target.value) : undefined,
+                      )
+                    }
+                  >
+                    {publishedListings.map((listing) => (
+                      <option key={listing.id} value={listing.id}>
+                        {listing.title}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    className="mt-1"
+                    placeholder="Enter listing ID"
+                    value={manualListingId}
+                    onChange={(event) => setManualListingId(event.target.value)}
+                  />
+                )}
+                {!hasHostToken && publishedListings.length === 0 && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Listings could not be loaded. Enter a listing ID manually.
+                  </p>
+                )}
               </label>
               <label className="text-sm font-medium text-slate-600">
                 Month
@@ -506,6 +666,11 @@ export default function TestBookingPage() {
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
+          {!hasHostToken && (
+            <p className="text-sm text-slate-500">
+              Log in as a host to load bookings and lifecycle actions.
+            </p>
+          )}
           {bookingsQuery.isError && (
             <p className="text-sm text-red-600">
               {bookingsQuery.error instanceof Error
@@ -584,6 +749,111 @@ export default function TestBookingPage() {
                 Got it
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {loginOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  {otpStep ? "Verify OTP" : "User login"}
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  {otpStep
+                    ? "Enter the OTP sent to the user."
+                    : "This token is used to create test bookings."}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="text-sm text-slate-400"
+                onClick={() => {
+                  setLoginOpen(false);
+                  setOtpStep(false);
+                  setOtpId(null);
+                  setOtpCode("");
+                  setOtpPreview(null);
+                }}
+              >
+                Close
+              </button>
+            </div>
+            <form
+              className="mt-4 space-y-4"
+              onSubmit={otpStep ? handleOtpVerify : handleLogin}
+            >
+              {otpStep ? (
+                <label className="text-sm font-medium text-slate-600">
+                  OTP code
+                  <Input
+                    type="text"
+                    className="mt-1"
+                    value={otpCode}
+                    onChange={(event) => setOtpCode(event.target.value)}
+                    required
+                  />
+                </label>
+              ) : (
+                <>
+                  <label className="text-sm font-medium text-slate-600">
+                    Email
+                    <Input
+                      type="email"
+                      className="mt-1"
+                      value={loginEmail}
+                      onChange={(event) => setLoginEmail(event.target.value)}
+                      required
+                    />
+                  </label>
+                  <label className="text-sm font-medium text-slate-600">
+                    Password
+                    <Input
+                      type="password"
+                      className="mt-1"
+                      value={loginPassword}
+                      onChange={(event) => setLoginPassword(event.target.value)}
+                      required
+                    />
+                  </label>
+                </>
+              )}
+              {otpPreview && (
+                <p className="text-xs text-slate-500">
+                  Dev preview: {otpPreview}
+                </p>
+              )}
+              {loginError && <p className="text-sm text-red-600">{loginError}</p>}
+              <div className="flex justify-end gap-3">
+                <Button
+                  type="secondary"
+                  className="rounded-2xl px-4 py-2 text-sm"
+                  onClick={() => {
+                    setLoginOpen(false);
+                    setOtpStep(false);
+                    setOtpId(null);
+                    setOtpCode("");
+                    setOtpPreview(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="primary"
+                  className="rounded-2xl px-4 py-2 text-sm"
+                  buttonType="submit"
+                  disabled={loginPending}
+                >
+                  {loginPending
+                    ? "Signing in..."
+                    : otpStep
+                      ? "Verify OTP"
+                      : "Log in"}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

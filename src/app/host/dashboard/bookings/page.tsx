@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useHostBookingsQuery, useCompleteBookingMutation } from "@/hooks/use-bookings";
+import Button from "@/components/general/Button";
 import { useHostListingsQuery } from "@/hooks/use-host-listings";
 import { useListingCalendarQuery } from "@/hooks/use-listing-calendar";
 import { cn } from "@/lib/utils";
@@ -17,6 +19,7 @@ const isDateBetween = (date: string, start: string, end: string) => {
 };
 
 export default function HostBookingsPage() {
+  const router = useRouter();
   const bookingsQuery = useHostBookingsQuery();
   const completeBooking = useCompleteBookingMutation();
   const listingsQuery = useHostListingsQuery();
@@ -182,16 +185,27 @@ export default function HostBookingsPage() {
                         </p>
                       </td>
                       <td className="py-3 text-right">
-                        {booking.status === "confirmed" && (
-                          <button
-                            type="button"
-                            className="text-sm font-semibold text-primary hover:underline disabled:opacity-50"
-                            disabled={completeBooking.isPending}
-                            onClick={() => completeBooking.mutate(booking.id)}
+                        <div className="flex flex-col items-end gap-2">
+                          <Button
+                            type="secondary"
+                            className="rounded-2xl px-4 py-1 text-xs"
+                            onClick={() =>
+                              router.push(`/host/dashboard/messages?bookingId=${booking.id}`)
+                            }
                           >
-                            Mark completed
-                          </button>
-                        )}
+                            Open chat
+                          </Button>
+                          {booking.status === "confirmed" && (
+                            <button
+                              type="button"
+                              className="text-sm font-semibold text-primary hover:underline disabled:opacity-50"
+                              disabled={completeBooking.isPending}
+                              onClick={() => completeBooking.mutate(booking.id)}
+                            >
+                              Mark completed
+                            </button>
+                          )}
+                        </div>
                       </td>
                       </tr>
                     );

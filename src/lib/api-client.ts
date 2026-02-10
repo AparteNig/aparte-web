@@ -109,6 +109,19 @@ export type AdminLoginOtpResponse = {
 
 export type AdminLoginResponse = AdminLoginSuccessResponse | AdminLoginOtpResponse;
 
+export type UserLoginSuccessResponse = {
+  requiresOtp: false;
+  tokens: AuthTokens;
+};
+
+export type UserLoginOtpResponse = {
+  requiresOtp: true;
+  otpId: number;
+  devPreview?: string;
+};
+
+export type UserLoginResponse = UserLoginSuccessResponse | UserLoginOtpResponse;
+
 export const registerHost = (payload: { email: string; phone: string; password: string }) =>
   apiFetch<{ hostProfile: HostProfile }>("/auth/hosts/register", {
     method: "POST",
@@ -133,6 +146,17 @@ export const loginAdminRequest = (payload: {
   device?: { type?: "web" | "android" | "ios"; ipAddress?: string };
 }) =>
   apiFetch<AdminLoginResponse>("/auth/admins/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    auth: false,
+  });
+
+export const loginUserRequest = (payload: {
+  email: string;
+  password: string;
+  device?: { type?: "web" | "android" | "ios"; ipAddress?: string };
+}) =>
+  apiFetch<UserLoginResponse>("/auth/users/login", {
     method: "POST",
     body: JSON.stringify(payload),
     auth: false,
@@ -205,6 +229,12 @@ export const uploadListingAsset = (listingId: number, file: File) => {
 export const getHostListings = () =>
   apiFetch<{ listings: HostListing[] }>("/hosts/listings", {
     method: "GET",
+  });
+
+export const getPublicListings = () =>
+  apiFetch<{ listings: HostListing[] }>("/listings/public", {
+    method: "GET",
+    auth: false,
   });
 
 export const createHostListing = (formData: FormData) =>
@@ -333,6 +363,19 @@ export const createCustomerBooking = (payload: CreateCustomerBookingPayload) =>
     method: "POST",
     body: JSON.stringify(payload),
     auth: false,
+  });
+
+export const createCustomerBookingWithToken = (
+  payload: CreateCustomerBookingPayload,
+  token: string,
+) =>
+  apiFetch<{ booking: HostBooking }>("/customer/bookings", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    auth: false,
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
   });
 
 export const checkInCustomerBooking = (bookingId: number) =>
