@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import ChatPanel from "@/components/messaging/chat-panel";
 import { getAuthCookie, HOST_AUTH_COOKIE } from "@/lib/auth";
 
-export default function HostMessagesPage() {
+const HostMessagesContent = () => {
   const [token, setToken] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const bookingIdParam = searchParams.get("bookingId");
@@ -26,5 +26,13 @@ export default function HostMessagesPage() {
         initialBookingId={Number.isNaN(bookingId) ? undefined : bookingId}
       />
     </div>
+  );
+};
+
+export default function HostMessagesPage() {
+  return (
+    <Suspense fallback={<div className="text-sm text-slate-500">Loading messages...</div>}>
+      <HostMessagesContent />
+    </Suspense>
   );
 }

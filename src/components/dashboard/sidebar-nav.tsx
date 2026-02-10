@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 
 import Button from "@/components/general/Button";
@@ -10,7 +11,6 @@ import { logoutAdminRequest } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  Logo,
   LogOutIcon,
   SideBarIcon,
   DashboardIcon,
@@ -25,6 +25,7 @@ import {
   AccountIcon,
   CalendarIcon
 } from "@/assets/icons";
+import LandingLogo from "@/assets/landing/Logo.png";
 
 const iconRegistry = {
   dashboard: DashboardIcon,
@@ -89,7 +90,9 @@ export const SidebarNav = ({ items, logoutHref, cookieName }: SidebarNavProps) =
     >
       <div className="flex flex-col gap-6 px-4 py-6">
         <div className="flex items-center justify-between">
-          {!collapsed && <Logo color="#0B1D11" color2="#00AC35" height={36} width={120} />}
+          {!collapsed && (
+            <Image src={LandingLogo} alt="Aparte" className="h-8 w-auto" priority />
+          )}
           <button
             className={cn("rounded-xl p-2 hover:bg-slate-100", collapsed ? "w-full justify-center" : "")}
             type="button"

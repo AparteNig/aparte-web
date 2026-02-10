@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
 
-import Logo from "@/assets/icons/Logo";
+import AuthScreenLogo from "@/assets/images/png/Authscreenlogo.png";
 import { BgLine, LoginImage } from "@/assets/images/svg";
 import { A1, A2, A3, A4, A5 } from "@/assets/images/png";
 
@@ -28,7 +28,7 @@ export const AuthLayout = ({
           className="absolute left-0 top-0 h-full w-full object-cover opacity-30"
         />
         <div className="relative z-10 flex max-w-md flex-col gap-10 text-white">
-          <Logo color="#0B1D11" color2="#ffffff" height={120} width={120} />
+          <Image src={AuthScreenLogo} alt="Aparte" className="h-34 w-44" priority />
           <div className="space-y-4 text-center">
             <h1 className="text-4xl font-semibold">Welcome to Aparte</h1>
             <p className="text-base text-white/80">
