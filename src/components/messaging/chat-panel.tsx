@@ -17,6 +17,8 @@ type MessageRow = {
   author: string;
   body: string;
   dateCreated?: string;
+  localId?: string;
+  deliveryStatus?: "sending" | "sent" | "delivered" | "read";
 };
 
 type ConversationSummary = {
@@ -93,6 +95,7 @@ export default function ChatPanel({
   const clientRef = useRef<ConversationsClient | null>(null);
   const conversationRef = useRef<Conversation | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const reconnectingRef = useRef(false);
 
   const identity = useMemo(() => (token ? getIdentityFromToken(token) : null), [token]);
 
@@ -121,6 +124,66 @@ export default function ChatPanel({
     return response.token;
   };
 
+  const initTwilioClient = async (twilioToken: string) => {
+    if (clientRef.current) {
+      clientRef.current.removeAllListeners();
+      clientRef.current.shutdown();
+    }
+    const client = new Client(twilioToken);
+    clientRef.current = client;
+    client.on("stateChanged", (state) => {
+      if (state === "failed") {
+        setError("Failed to initialize chat.");
+      }
+    });
+    client.on("connectionStateChanged", (state) => {
+      setConnectionState(state);
+    });
+    client.on("tokenAboutToExpire", async () => {
+      try {
+        const refreshed = await fetchTwilioToken();
+        await client.updateToken(refreshed);
+      } catch (err) {
+        console.error("[chat] token refresh failed", err);
+      }
+    });
+    client.on("tokenExpired", async () => {
+      try {
+        const refreshed = await fetchTwilioToken();
+        await initTwilioClient(refreshed);
+      } catch (err) {
+        console.error("[chat] token expired refresh failed", err);
+      }
+    });
+  };
+
+  const refreshTwilioClient = async () => {
+    if (reconnectingRef.current) return;
+    reconnectingRef.current = true;
+    try {
+      const twilioToken = await fetchTwilioToken();
+      if (!clientRef.current) {
+        await initTwilioClient(twilioToken);
+      } else {
+        try {
+          await clientRef.current.updateToken(twilioToken);
+        } catch (err) {
+          console.error("[chat] token update failed, reinitializing", err);
+          await initTwilioClient(twilioToken);
+        }
+      }
+      if (conversationSid && clientRef.current) {
+        try {
+          conversationRef.current = await clientRef.current.getConversationBySid(conversationSid);
+        } catch (err) {
+          console.error("[chat] reload conversation failed", err);
+        }
+      }
+    } finally {
+      reconnectingRef.current = false;
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     const initClient = async () => {
@@ -128,31 +191,7 @@ export default function ChatPanel({
       try {
         const twilioToken = await fetchTwilioToken();
         if (cancelled) return;
-        if (clientRef.current) {
-          clientRef.current.removeAllListeners();
-          clientRef.current.shutdown();
-        }
-        const client = new Client(twilioToken);
-        clientRef.current = client;
-        client.on("stateChanged", (state) => {
-          setConnectionState(state);
-        });
-        client.on("tokenAboutToExpire", async () => {
-          try {
-            const refreshed = await fetchTwilioToken();
-            await client.updateToken(refreshed);
-          } catch (err) {
-            console.error("[chat] token refresh failed", err);
-          }
-        });
-        client.on("tokenExpired", async () => {
-          try {
-            const refreshed = await fetchTwilioToken();
-            await client.updateToken(refreshed);
-          } catch (err) {
-            console.error("[chat] token expired refresh failed", err);
-          }
-        });
+        await initTwilioClient(twilioToken);
       } catch (err) {
         console.error("[chat] init client failed", err);
         setError(err instanceof Error ? err.message : "Failed to initialize chat.");
@@ -185,18 +224,44 @@ export default function ChatPanel({
             author: msg.author ?? "",
             body: msg.body ?? "",
             dateCreated: msg.dateCreated?.toISOString(),
+            deliveryStatus: "sent",
           })),
         );
         conversation.on("messageAdded", (msg: Message) => {
-          setRealtimeMessages((prev) => [
-            ...prev,
-            {
-              sid: msg.sid,
-              author: msg.author ?? "",
-              body: msg.body ?? "",
-              dateCreated: msg.dateCreated?.toISOString(),
-            },
-          ]);
+          setRealtimeMessages((prev) => {
+            if (prev.some((item) => item.sid === msg.sid)) {
+              return prev;
+            }
+            const optimisticMatch = prev.find(
+              (item) =>
+                item.localId &&
+                item.deliveryStatus === "sending" &&
+                item.author === (msg.author ?? "") &&
+                item.body === (msg.body ?? "")
+            );
+            if (optimisticMatch) {
+              return prev.map((item) =>
+                item.localId === optimisticMatch.localId
+                  ? {
+                      ...item,
+                      sid: msg.sid,
+                      dateCreated: msg.dateCreated?.toISOString(),
+                      deliveryStatus: "sent",
+                    }
+                  : item,
+              );
+            }
+            return [
+              ...prev,
+              {
+                sid: msg.sid,
+                author: msg.author ?? "",
+                body: msg.body ?? "",
+                dateCreated: msg.dateCreated?.toISOString(),
+                deliveryStatus: "sent",
+              },
+            ];
+          });
         });
       } catch (err) {
         console.error("[chat] load conversation failed", err);
@@ -261,10 +326,6 @@ export default function ChatPanel({
   const sendMessageMutation = useMutation({
     mutationFn: async (payload: { author: string; body: string }) => {
       if (!conversationSid) throw new Error("Missing conversation.");
-      if (conversationRef.current) {
-        const sid = await conversationRef.current.sendMessage(payload.body);
-        return { sid };
-      }
       if (!token) throw new Error("Missing auth token");
       return fetchWithAuth<{ sid: string }>(`/conversations/${conversationSid}/messages`, token, {
         method: "POST",
@@ -272,7 +333,6 @@ export default function ChatPanel({
       });
     },
     onSuccess: async () => {
-      setMessage("");
       if (conversationSid && token) {
         fetchWithAuth<{ success: boolean }>(`/conversations/${conversationSid}/last-message`, token, {
           method: "POST",
@@ -283,6 +343,19 @@ export default function ChatPanel({
       }
     },
     onError: (err: unknown) => {
+      const errorPayload =
+        err instanceof Error
+          ? { message: err.message, stack: err.stack }
+          : { error: err };
+      console.error("[chat] send message failed", {
+        ...errorPayload,
+        identity,
+        conversationSid,
+        connectionState,
+      });
+      refreshTwilioClient().catch((refreshErr) => {
+        console.error("[chat] client refresh failed after send error", refreshErr);
+      });
       setError(err instanceof Error ? err.message : "Failed to send message.");
     },
   });
@@ -332,11 +405,37 @@ export default function ChatPanel({
       setError("Missing identity.");
       return;
     }
-    if (!message.trim()) {
+    const trimmed = message.trim();
+    if (!trimmed) {
       setError("Message cannot be empty.");
       return;
     }
-    sendMessageMutation.mutate({ author: identity, body: message.trim() });
+    const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimistic: MessageRow = {
+      sid: localId,
+      localId,
+      author: identity,
+      body: trimmed,
+      dateCreated: new Date().toISOString(),
+      deliveryStatus: "sending",
+    };
+    setRealtimeMessages((prev) => [...prev, optimistic]);
+    setMessage("");
+    sendMessageMutation.mutate(
+      { author: identity, body: trimmed },
+      {
+        onSuccess: (payload) => {
+          setRealtimeMessages((prev) => {
+            const updated = prev.map((item) =>
+              item.localId === localId
+                ? { ...item, sid: payload.sid, deliveryStatus: "sent" }
+                : item,
+            );
+            return updated.filter((item) => item.sid !== payload.sid || item.localId === localId);
+          });
+        },
+      },
+    );
   };
 
   const isOwnMessage = (author?: string) => Boolean(identity && author === identity);
@@ -603,7 +702,7 @@ export default function ChatPanel({
                       );
                       return (
                       <div
-                        key={msg.sid}
+                        key={msg.localId ?? msg.sid}
                         className={`flex ${isOwnMessage(msg.author) ? "justify-end" : "justify-start"}`}
                       >
                         {!isOwnMessage(msg.author) && (
@@ -633,9 +732,10 @@ export default function ChatPanel({
                           </p>
                           <p className="text-sm">{msg.body}</p>
                           {msg.dateCreated && (
-                            <p className="mt-1 text-[10px] opacity-70">
-                              {new Date(msg.dateCreated).toLocaleString()}
-                            </p>
+                            <div className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-70">
+                              <span>{new Date(msg.dateCreated).toLocaleString()}</span>
+                              {isOwnMessage(msg.author) && renderDeliveryStatus(msg.deliveryStatus)}
+                            </div>
                           )}
                         </div>
                       </div>
@@ -661,9 +761,9 @@ export default function ChatPanel({
                     type="primary"
                     className="rounded-full bg-emerald-600 px-6 text-white hover:bg-emerald-700"
                     buttonType="submit"
-                    disabled={sendMessageMutation.isPending}
+                    disabled={!message.trim()}
                   >
-                    {sendMessageMutation.isPending ? "Sending..." : "Send"}
+                    Send
                   </Button>
                 </form>
               </>
@@ -681,3 +781,43 @@ export default function ChatPanel({
     </div>
   );
 }
+  const renderDeliveryStatus = (status?: MessageRow["deliveryStatus"]) => {
+    if (!status) return null;
+    if (status === "sending") {
+      return (
+        <span className="inline-flex h-3 w-3 items-center justify-center">
+          <svg viewBox="0 0 16 16" className="h-3 w-3 text-current">
+            <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M8 4.5v3.8l2.6 1.7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </span>
+      );
+    }
+    if (status === "read") {
+      return (
+        <span className="inline-flex h-3 w-5 items-center justify-center text-sky-200">
+          <svg viewBox="0 0 20 16" className="h-3 w-5">
+            <path d="M2 8.5l3 3.2 6-6.7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M9 11l6-6.7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+      );
+    }
+    if (status === "delivered") {
+      return (
+        <span className="inline-flex h-3 w-5 items-center justify-center text-white/80">
+          <svg viewBox="0 0 20 16" className="h-3 w-5">
+            <path d="M2 8.5l3 3.2 6-6.7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M9 11l6-6.7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex h-3 w-3 items-center justify-center text-white/80">
+        <svg viewBox="0 0 16 16" className="h-3 w-3">
+          <path d="M2.5 8.5l3 3.2 7-7.4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+    );
+  };
