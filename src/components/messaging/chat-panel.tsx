@@ -428,7 +428,7 @@ export default function ChatPanel({
           setRealtimeMessages((prev) => {
             const updated = prev.map((item) =>
               item.localId === localId
-                ? { ...item, sid: payload.sid, deliveryStatus: "sent" }
+                ? { ...item, sid: payload.sid, deliveryStatus: "sent" as const }
                 : item,
             );
             return updated.filter((item) => item.sid !== payload.sid || item.localId === localId);
