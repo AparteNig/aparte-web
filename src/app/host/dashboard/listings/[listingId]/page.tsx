@@ -10,6 +10,7 @@ import LoadingOverlay from "@/components/general/LoadingOverlay";
 import MediaGalleryModal from "@/components/general/MediaGalleryModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import AddressAutocompleteInput from "@/components/general/form/AddressAutocompleteInput";
 import {
   useAttachListingPhotosMutation,
   useDeleteListingPhotoMutation,
@@ -624,6 +625,12 @@ export default function HostListingDetailPage() {
                     {currencyFormatter.format(listing.serviceFee)}
                   </span>
                 </div>
+                <div className="flex items-center justify-between">
+                  <span>Caution fee</span>
+                  <span className="font-semibold text-slate-900">
+                    {currencyFormatter.format(listing.cautionFee ?? 0)}
+                  </span>
+                </div>
                 <p className="text-xs text-slate-500">
                   Update fees anytime to reflect operational costs. Guests will see the total before booking.
                 </p>
@@ -732,11 +739,11 @@ export default function HostListingDetailPage() {
                   </label>
                   <label className="space-y-2 text-sm">
                     <span className="font-semibold text-slate-800">Address line 1</span>
-                    <Input {...register("addressLine1", { required: true })} />
+                    <AddressAutocompleteInput {...register("addressLine1", { required: true })} />
                   </label>
                   <label className="space-y-2 text-sm">
                     <span className="font-semibold text-slate-800">Address line 2</span>
-                    <Input {...register("addressLine2")} />
+                    <AddressAutocompleteInput {...register("addressLine2")} />
                   </label>
                   <label className="space-y-2 text-sm">
                     <span className="font-semibold text-slate-800">City</span>

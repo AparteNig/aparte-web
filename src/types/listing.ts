@@ -43,6 +43,7 @@ export type HostListing = {
   currency: string;
   cleaningFee: number;
   serviceFee: number;
+  cautionFee: number;
   maxGuests: number;
   bedrooms: number;
   bathrooms: number;

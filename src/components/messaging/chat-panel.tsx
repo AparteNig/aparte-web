@@ -1,8 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { Client as ConversationsClient, Conversation, Message } from "@twilio/conversations";
+import type {
+  Client as ConversationsClient,
+  Conversation,
+  Message,
+} from "@twilio/conversations";
 import { Client } from "@twilio/conversations";
 
 import Button from "@/components/general/Button";
@@ -18,6 +22,9 @@ type MessageRow = {
   body: string;
   dateCreated?: string;
   localId?: string;
+  mediaUrl?: string;
+  mediaContentType?: string;
+  mediaKey?: string;
   deliveryStatus?: "sending" | "sent" | "delivered" | "read";
 };
 
@@ -55,7 +62,11 @@ type ChatPanelProps = {
 const buildUrl = (path: string) =>
   path.startsWith("http") ? path : `${API_BASE_URL.replace(/\/$/, "")}${path}`;
 
-const fetchWithAuth = async <T,>(path: string, token: string, options: RequestInit = {}) => {
+const fetchWithAuth = async <T,>(
+  path: string,
+  token: string,
+  options: RequestInit = {},
+) => {
   const response = await fetch(buildUrl(path), {
     ...options,
     headers: {
@@ -75,11 +86,24 @@ const fetchWithAuth = async <T,>(path: string, token: string, options: RequestIn
   return payload as T;
 };
 
+const imageMarkerPrefix = "__image__:";
+
+const parseMediaBody = (body: string) => {
+  if (body.startsWith(imageMarkerPrefix)) {
+    const value = body.slice(imageMarkerPrefix.length).trim();
+    if (value.startsWith("http")) {
+      return { mediaUrl: value, mediaKey: undefined, body: "" };
+    }
+    return { mediaUrl: undefined, mediaKey: value, body: "" };
+  }
+  return { mediaUrl: undefined, mediaKey: undefined, body };
+};
+
 export default function ChatPanel({
   token,
   title,
   allowAdminDirect,
-  initialBookingId
+  initialBookingId,
 }: ChatPanelProps) {
   const [bookingId, setBookingId] = useState("");
   const [hostId, setHostId] = useState("");
@@ -88,6 +112,7 @@ export default function ChatPanel({
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [showList, setShowList] = useState(true);
   const [message, setMessage] = useState("");
+  const [mediaUploading, setMediaUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [realtimeMessages, setRealtimeMessages] = useState<MessageRow[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -96,6 +121,7 @@ export default function ChatPanel({
   const conversationRef = useRef<Conversation | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const reconnectingRef = useRef(false);
+  const mediaInputRef = useRef<HTMLInputElement | null>(null);
 
   const identity = useMemo(() => (token ? getIdentityFromToken(token) : null), [token]);
 
@@ -113,7 +139,7 @@ export default function ChatPanel({
     enabled: Boolean(token),
     staleTime: 1000 * 30,
   });
-  
+
   const fetchTwilioToken = async () => {
     if (!token) throw new Error("Missing auth token");
     const response = await fetchWithAuth<{ token: string }>(
@@ -174,7 +200,8 @@ export default function ChatPanel({
       }
       if (conversationSid && clientRef.current) {
         try {
-          conversationRef.current = await clientRef.current.getConversationBySid(conversationSid);
+          conversationRef.current =
+            await clientRef.current.getConversationBySid(conversationSid);
         } catch (err) {
           console.error("[chat] reload conversation failed", err);
         }
@@ -204,13 +231,40 @@ export default function ChatPanel({
     };
   }, [token]);
 
+  const mapTwilioMessage = async (msg: Message): Promise<MessageRow> => {
+    const parsed = parseMediaBody(msg.body ?? "");
+    let mediaUrl = parsed.mediaUrl;
+    if (!mediaUrl && parsed.mediaKey && token) {
+      try {
+        const signed = await fetchWithAuth<{ url: string }>(
+          `/uploads/signed-url?key=${encodeURIComponent(parsed.mediaKey)}`,
+          token,
+          { method: "GET" },
+        );
+        mediaUrl = signed.url;
+      } catch (err) {
+        console.error("[chat] media signed url failed", err);
+      }
+    }
+    return {
+      sid: msg.sid,
+      author: msg.author ?? "",
+      body: parsed.body,
+      dateCreated: msg.dateCreated?.toISOString(),
+      mediaUrl,
+      mediaKey: parsed.mediaKey,
+      deliveryStatus: "sent",
+    };
+  };
+
   useEffect(() => {
     let active = true;
     const loadConversation = async () => {
       if (!conversationSid || !clientRef.current) return;
       setMessagesLoading(true);
       try {
-        const conversation = await clientRef.current.getConversationBySid(conversationSid);
+        const conversation =
+          await clientRef.current.getConversationBySid(conversationSid);
         if (!active) return;
         if (conversationRef.current) {
           conversationRef.current.removeAllListeners("messageAdded");
@@ -218,16 +272,11 @@ export default function ChatPanel({
         conversationRef.current = conversation;
         const messages = await conversation.getMessages(50);
         if (!active) return;
-        setRealtimeMessages(
-          messages.items.map((msg) => ({
-            sid: msg.sid,
-            author: msg.author ?? "",
-            body: msg.body ?? "",
-            dateCreated: msg.dateCreated?.toISOString(),
-            deliveryStatus: "sent",
-          })),
-        );
-        conversation.on("messageAdded", (msg: Message) => {
+        const mapped = await Promise.all(messages.items.map(mapTwilioMessage));
+        if (!active) return;
+        setRealtimeMessages(mapped);
+        conversation.on("messageAdded", async (msg: Message) => {
+          const mappedMessage = await mapTwilioMessage(msg);
           setRealtimeMessages((prev) => {
             if (prev.some((item) => item.sid === msg.sid)) {
               return prev;
@@ -237,30 +286,25 @@ export default function ChatPanel({
                 item.localId &&
                 item.deliveryStatus === "sending" &&
                 item.author === (msg.author ?? "") &&
-                item.body === (msg.body ?? "")
+                item.body === (msg.body ?? ""),
             );
-            if (optimisticMatch) {
+            const fallbackOptimistic = prev.find(
+              (item) =>
+                item.localId &&
+                item.deliveryStatus === "sending" &&
+                item.author === (msg.author ?? "") &&
+                ((item.mediaKey && item.mediaKey === mappedMessage.mediaKey) ||
+                  (item.mediaUrl && !item.body)),
+            );
+            const match = optimisticMatch ?? fallbackOptimistic;
+            if (match) {
               return prev.map((item) =>
-                item.localId === optimisticMatch.localId
-                  ? {
-                      ...item,
-                      sid: msg.sid,
-                      dateCreated: msg.dateCreated?.toISOString(),
-                      deliveryStatus: "sent",
-                    }
+                item.localId === match.localId
+                  ? { ...mappedMessage, localId: item.localId }
                   : item,
               );
             }
-            return [
-              ...prev,
-              {
-                sid: msg.sid,
-                author: msg.author ?? "",
-                body: msg.body ?? "",
-                dateCreated: msg.dateCreated?.toISOString(),
-                deliveryStatus: "sent",
-              },
-            ];
+            return [...prev, mappedMessage];
           });
         });
       } catch (err) {
@@ -287,9 +331,13 @@ export default function ChatPanel({
   const openByBookingMutation = useMutation({
     mutationFn: async (id: string) => {
       if (!token) throw new Error("Missing auth token");
-      return fetchWithAuth<{ id: number; sid: string }>(`/conversations/booking/${id}`, token, {
-        method: "POST",
-      });
+      return fetchWithAuth<{ id: number; sid: string }>(
+        `/conversations/booking/${id}`,
+        token,
+        {
+          method: "POST",
+        },
+      );
     },
     onSuccess: (payload) => {
       setConversationSid(payload.sid);
@@ -327,16 +375,24 @@ export default function ChatPanel({
     mutationFn: async (payload: { author: string; body: string }) => {
       if (!conversationSid) throw new Error("Missing conversation.");
       if (!token) throw new Error("Missing auth token");
-      return fetchWithAuth<{ sid: string }>(`/conversations/${conversationSid}/messages`, token, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
+      return fetchWithAuth<{ sid: string }>(
+        `/conversations/${conversationSid}/messages`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+      );
     },
     onSuccess: async () => {
       if (conversationSid && token) {
-        fetchWithAuth<{ success: boolean }>(`/conversations/${conversationSid}/last-message`, token, {
-          method: "POST",
-        }).catch((err) => {
+        fetchWithAuth<{ success: boolean }>(
+          `/conversations/${conversationSid}/last-message`,
+          token,
+          {
+            method: "POST",
+          },
+        ).catch((err) => {
           console.error("[chat] last message update failed", err);
         });
         conversationsQuery.refetch();
@@ -398,6 +454,119 @@ export default function ChatPanel({
     });
   };
 
+  const handleSendMedia = async (file: File) => {
+    if (!identity) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setError("File too large. Max size is 10MB.");
+      return;
+    }
+    setError(null);
+    setMediaUploading(true);
+    const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const previewUrl = URL.createObjectURL(file);
+    setRealtimeMessages((prev) => [
+      ...prev,
+      {
+        sid: localId,
+        localId,
+        author: identity,
+        body: "",
+        dateCreated: new Date().toISOString(),
+        deliveryStatus: "sending",
+        mediaUrl: previewUrl,
+        mediaContentType: file.type,
+      },
+    ]);
+    try {
+      if (!token) {
+        throw new Error("Missing conversation.");
+      }
+      const entityId = conversationId ? String(conversationId) : conversationSid;
+      if (!entityId) {
+        throw new Error("Missing conversation.");
+      }
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("type", "chat");
+      formData.append("entityId", entityId);
+      const response = await fetch(buildUrl("/uploads"), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message =
+          payload && typeof payload === "object" && "message" in payload
+            ? (payload as { message: string }).message
+            : "Upload failed";
+        throw new Error(message);
+      }
+      const key = (payload as { key?: string }).key;
+      if (!key) {
+        throw new Error("Upload failed.");
+      }
+      const body = `${imageMarkerPrefix}${key}`;
+      setRealtimeMessages((prev) =>
+        prev.map((item) =>
+          item.localId === localId
+            ? { ...item, mediaKey: key }
+            : item,
+        ),
+      );
+      if (!conversationSid) {
+        throw new Error("Missing conversation.");
+      }
+      const messageResponse = await fetchWithAuth<{ sid: string }>(
+        `/conversations/${conversationSid}/messages`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({ author: identity, body }),
+        },
+      );
+      setRealtimeMessages((prev) =>
+        prev.map((item) =>
+          item.localId === localId
+            ? { ...item, sid: messageResponse.sid, deliveryStatus: "sent" }
+            : item,
+        ),
+      );
+    } catch (err) {
+      console.error("[chat] media send failed", err);
+      setError(err instanceof Error ? err.message : "Failed to send image.");
+    } finally {
+      setMediaUploading(false);
+    }
+  };
+
+  const refreshMediaUrl = async (message: MessageRow) => {
+    if (!message.mediaKey || !token) return;
+    try {
+      const signed = await fetchWithAuth<{ url: string }>(
+        `/uploads/signed-url?key=${encodeURIComponent(message.mediaKey)}`,
+        token,
+        { method: "GET" },
+      );
+      setRealtimeMessages((prev) =>
+        prev.map((item) =>
+          item.sid === message.sid ? { ...item, mediaUrl: signed.url } : item,
+        ),
+      );
+    } catch (err) {
+      console.error("[chat] media refresh failed", err);
+    }
+  };
+
+  const handleMediaChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await handleSendMedia(file);
+    if (mediaInputRef.current) {
+      mediaInputRef.current.value = "";
+    }
+  };
+
   const handleSendMessage = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
@@ -431,7 +600,9 @@ export default function ChatPanel({
                 ? { ...item, sid: payload.sid, deliveryStatus: "sent" as const }
                 : item,
             );
-            return updated.filter((item) => item.sid !== payload.sid || item.localId === localId);
+            return updated.filter(
+              (item) => item.sid !== payload.sid || item.localId === localId,
+            );
           });
         },
       },
@@ -443,10 +614,15 @@ export default function ChatPanel({
   const getInitials = (value?: string | null) => {
     if (!value) return "?";
     const parts = value.trim().split(/\s+/);
-    return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "?";
+    return (
+      parts
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase())
+        .join("") || "?"
+    );
   };
   const activeConversation = conversationsQuery.data?.find(
-    (conversation) => conversation.twilioSid === conversationSid
+    (conversation) => conversation.twilioSid === conversationSid,
   );
   const hostDisplayName =
     activeConversation?.hostDisplayName ??
@@ -454,9 +630,7 @@ export default function ChatPanel({
     activeConversation?.hostEmail ??
     "Host";
   const guestDisplayName =
-    activeConversation?.guestName ??
-    activeConversation?.userEmail ??
-    "Guest";
+    activeConversation?.guestName ?? activeConversation?.userEmail ?? "Guest";
   const hostAvatarUrl = activeConversation?.hostAvatarUrl ?? null;
   const hostIdentity = getHostIdentity(activeConversation?.hostId ?? null);
   const getAuthorLabel = (author?: string) => {
@@ -494,164 +668,170 @@ export default function ChatPanel({
         >
           {(!conversationSid || showList) && (
             <div className="space-y-4 rounded-3xl border border-emerald-100 bg-emerald-50/40 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-emerald-900">Your conversations</p>
-              <Button
-                type="secondary"
-                className="rounded-2xl border-emerald-100 bg-white px-4 py-2 text-xs text-emerald-900"
-                onClick={() => conversationsQuery.refetch()}
-              >
-                Refresh
-              </Button>
-            </div>
-            {conversationsQuery.isLoading ? (
-              <p className="text-sm text-slate-500">Loading conversations...</p>
-            ) : conversationsQuery.data && conversationsQuery.data.length > 0 ? (
-              <div className="space-y-2">
-                {conversationsQuery.data.map((conversation) => {
-                  const isActive = conversation.twilioSid === conversationSid;
-                  const bookingLabel = conversation.bookingId
-                    ? `Booking #${conversation.bookingId}`
-                    : `Conversation #${conversation.id}`;
-                  const listingLine = conversation.listingTitle
-                    ? `${conversation.listingTitle} · ${conversation.listingCity ?? ""} ${conversation.listingCountry ?? ""}`.trim()
-                    : null;
-                  const dateLine =
-                    conversation.bookingStartDate && conversation.bookingEndDate
-                      ? `${new Date(conversation.bookingStartDate).toLocaleDateString()} – ${new Date(
-                          conversation.bookingEndDate,
-                        ).toLocaleDateString()}`
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-emerald-900">
+                  Your conversations
+                </p>
+                <Button
+                  type="secondary"
+                  className="rounded-2xl border-emerald-100 bg-white px-4 py-2 text-xs text-emerald-900"
+                  onClick={() => conversationsQuery.refetch()}
+                >
+                  Refresh
+                </Button>
+              </div>
+              {conversationsQuery.isLoading ? (
+                <p className="text-sm text-slate-500">Loading conversations...</p>
+              ) : conversationsQuery.data && conversationsQuery.data.length > 0 ? (
+                <div className="space-y-2">
+                  {conversationsQuery.data.map((conversation) => {
+                    const isActive = conversation.twilioSid === conversationSid;
+                    const bookingLabel = conversation.bookingId
+                      ? `Booking #${conversation.bookingId}`
+                      : `Conversation #${conversation.id}`;
+                    const listingLine = conversation.listingTitle
+                      ? `${conversation.listingTitle} · ${conversation.listingCity ?? ""} ${conversation.listingCountry ?? ""}`.trim()
                       : null;
-                  const subtitleLine = conversation.guestName
-                    ? `Guest ${conversation.guestName}`
-                    : conversation.userEmail
-                      ? `Guest ${conversation.userEmail}`
-                      : conversation.hostDisplayName
-                        ? `Host ${conversation.hostDisplayName}`
-                        : conversation.hostName
-                          ? `Host ${conversation.hostName}`
-                          : conversation.hostEmail
-                            ? `Host ${conversation.hostEmail}`
-                            : null;
-                  const lastMessageTime = conversation.lastMessageAt
-                    ? new Date(conversation.lastMessageAt).toLocaleString()
-                    : conversation.updatedAt
-                      ? new Date(conversation.updatedAt).toLocaleString()
-                      : null;
-                  const hostLabel =
-                    conversation.hostDisplayName ??
-                    conversation.hostName ??
-                    conversation.hostEmail ??
-                    "Host";
-                  return (
-                    <button
-                      type="button"
-                      key={conversation.id}
-                      onClick={() => {
-                        setConversationSid(conversation.twilioSid);
-                        setConversationId(conversation.id);
-                        setShowList(false);
-                      }}
-                      className={`w-full rounded-2xl border p-3 text-left text-sm transition ${
-                        isActive
-                          ? "border-emerald-400 bg-white shadow-sm"
-                          : "border-emerald-100 bg-white hover:border-emerald-200"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-3">
-                          {conversation.hostAvatarUrl ? (
-                            <img
-                              src={conversation.hostAvatarUrl}
-                              alt={hostLabel}
-                              className="h-9 w-9 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-800">
-                              {getInitials(hostLabel)}
-                            </div>
-                          )}
-                          <div>
-                            <p className="text-sm font-semibold text-slate-800">{bookingLabel}</p>
-                            {subtitleLine && (
-                              <p className="text-xs text-slate-500">{subtitleLine}</p>
+                    const dateLine =
+                      conversation.bookingStartDate && conversation.bookingEndDate
+                        ? `${new Date(conversation.bookingStartDate).toLocaleDateString()} – ${new Date(
+                            conversation.bookingEndDate,
+                          ).toLocaleDateString()}`
+                        : null;
+                    const subtitleLine = conversation.guestName
+                      ? `Guest ${conversation.guestName}`
+                      : conversation.userEmail
+                        ? `Guest ${conversation.userEmail}`
+                        : conversation.hostDisplayName
+                          ? `Host ${conversation.hostDisplayName}`
+                          : conversation.hostName
+                            ? `Host ${conversation.hostName}`
+                            : conversation.hostEmail
+                              ? `Host ${conversation.hostEmail}`
+                              : null;
+                    const lastMessageTime = conversation.lastMessageAt
+                      ? new Date(conversation.lastMessageAt).toLocaleString()
+                      : conversation.updatedAt
+                        ? new Date(conversation.updatedAt).toLocaleString()
+                        : null;
+                    const hostLabel =
+                      conversation.hostDisplayName ??
+                      conversation.hostName ??
+                      conversation.hostEmail ??
+                      "Host";
+                    return (
+                      <button
+                        type="button"
+                        key={conversation.id}
+                        onClick={() => {
+                          setConversationSid(conversation.twilioSid);
+                          setConversationId(conversation.id);
+                          setShowList(false);
+                        }}
+                        className={`w-full rounded-2xl border p-3 text-left text-sm transition ${
+                          isActive
+                            ? "border-emerald-400 bg-white shadow-sm"
+                            : "border-emerald-100 bg-white hover:border-emerald-200"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-3">
+                            {conversation.hostAvatarUrl ? (
+                              <img
+                                src={conversation.hostAvatarUrl}
+                                alt={hostLabel}
+                                className="h-9 w-9 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-800">
+                                {getInitials(hostLabel)}
+                              </div>
                             )}
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800">
+                                {bookingLabel}
+                              </p>
+                              {subtitleLine && (
+                                <p className="text-xs text-slate-500">{subtitleLine}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {lastMessageTime && (
+                              <span className="text-[11px] text-slate-400">
+                                {lastMessageTime}
+                              </span>
+                            )}
+                            <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700">
+                              {conversation.status}
+                            </span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {lastMessageTime && (
-                            <span className="text-[11px] text-slate-400">{lastMessageTime}</span>
-                          )}
-                          <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700">
-                            {conversation.status}
-                          </span>
-                        </div>
-                      </div>
-                      {listingLine && (
-                        <p className="mt-1 text-xs text-slate-500">{listingLine}</p>
-                      )}
-                      {dateLine && <p className="text-xs text-slate-400">{dateLine}</p>}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500">No conversations yet.</p>
-            )}
+                        {listingLine && (
+                          <p className="mt-1 text-xs text-slate-500">{listingLine}</p>
+                        )}
+                        {dateLine && <p className="text-xs text-slate-400">{dateLine}</p>}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No conversations yet.</p>
+              )}
 
-            <form className="grid gap-3" onSubmit={handleOpenBooking}>
-              <label className="text-sm font-medium text-slate-600">
-                Booking ID (open or create)
-                <Input
-                  className="mt-1 rounded-2xl border-emerald-100 focus-visible:ring-emerald-200"
-                  placeholder="e.g. 5"
-                  value={bookingId}
-                  onChange={(event) => setBookingId(event.target.value)}
-                />
-              </label>
-              <Button
-                type="primary"
-                className="rounded-2xl bg-emerald-600 px-5 text-white hover:bg-emerald-700"
-                buttonType="submit"
-                disabled={openByBookingMutation.isPending}
-              >
-                {openByBookingMutation.isPending ? "Opening..." : "Open booking chat"}
-              </Button>
-            </form>
-
-            {allowAdminDirect && (
-              <form
-                className="grid gap-3 rounded-2xl border border-emerald-100 bg-white p-3"
-                onSubmit={handleOpenAdmin}
-              >
+              <form className="grid gap-3" onSubmit={handleOpenBooking}>
                 <label className="text-sm font-medium text-slate-600">
-                  Host ID
+                  Booking ID (open or create)
                   <Input
                     className="mt-1 rounded-2xl border-emerald-100 focus-visible:ring-emerald-200"
-                    placeholder="host id"
-                    value={hostId}
-                    onChange={(event) => setHostId(event.target.value)}
-                  />
-                </label>
-                <label className="text-sm font-medium text-slate-600">
-                  User ID
-                  <Input
-                    className="mt-1 rounded-2xl border-emerald-100 focus-visible:ring-emerald-200"
-                    placeholder="user id"
-                    value={userId}
-                    onChange={(event) => setUserId(event.target.value)}
+                    placeholder="e.g. 5"
+                    value={bookingId}
+                    onChange={(event) => setBookingId(event.target.value)}
                   />
                 </label>
                 <Button
-                  type="secondary"
-                  className="rounded-2xl border-emerald-100 bg-emerald-50 px-5 text-emerald-900"
+                  type="primary"
+                  className="rounded-2xl bg-emerald-600 px-5 text-white hover:bg-emerald-700"
                   buttonType="submit"
-                  disabled={openAdminMutation.isPending}
+                  disabled={openByBookingMutation.isPending}
                 >
-                {openAdminMutation.isPending ? "Opening..." : "Open direct chat"}
-              </Button>
-            </form>
-            )}
+                  {openByBookingMutation.isPending ? "Opening..." : "Open booking chat"}
+                </Button>
+              </form>
+
+              {allowAdminDirect && (
+                <form
+                  className="grid gap-3 rounded-2xl border border-emerald-100 bg-white p-3"
+                  onSubmit={handleOpenAdmin}
+                >
+                  <label className="text-sm font-medium text-slate-600">
+                    Host ID
+                    <Input
+                      className="mt-1 rounded-2xl border-emerald-100 focus-visible:ring-emerald-200"
+                      placeholder="host id"
+                      value={hostId}
+                      onChange={(event) => setHostId(event.target.value)}
+                    />
+                  </label>
+                  <label className="text-sm font-medium text-slate-600">
+                    User ID
+                    <Input
+                      className="mt-1 rounded-2xl border-emerald-100 focus-visible:ring-emerald-200"
+                      placeholder="user id"
+                      value={userId}
+                      onChange={(event) => setUserId(event.target.value)}
+                    />
+                  </label>
+                  <Button
+                    type="secondary"
+                    className="rounded-2xl border-emerald-100 bg-emerald-50 px-5 text-emerald-900"
+                    buttonType="submit"
+                    disabled={openAdminMutation.isPending}
+                  >
+                    {openAdminMutation.isPending ? "Opening..." : "Open direct chat"}
+                  </Button>
+                </form>
+              )}
             </div>
           )}
 
@@ -672,7 +852,9 @@ export default function ChatPanel({
                       </div>
                     )}
                     <div>
-                      <p className="text-sm font-semibold text-slate-800">{hostDisplayName}</p>
+                      <p className="text-sm font-semibold text-slate-800">
+                        {hostDisplayName}
+                      </p>
                       <p className="text-xs text-slate-500">
                         Sid: {conversationSid}
                         {conversationId ? ` · ID ${conversationId}` : ""}
@@ -698,48 +880,61 @@ export default function ChatPanel({
                   ) : realtimeMessages.length > 0 ? (
                     realtimeMessages.map((msg) => {
                       const showHostAvatar = Boolean(
-                        hostIdentity && msg.author === hostIdentity && !isOwnMessage(msg.author)
+                        hostIdentity &&
+                        msg.author === hostIdentity &&
+                        !isOwnMessage(msg.author),
                       );
                       return (
-                      <div
-                        key={msg.localId ?? msg.sid}
-                        className={`flex ${isOwnMessage(msg.author) ? "justify-end" : "justify-start"}`}
-                      >
-                        {!isOwnMessage(msg.author) && (
-                          <div className="mr-2 mt-1">
-                            {showHostAvatar && hostAvatarUrl ? (
+                        <div
+                          key={msg.localId ?? msg.sid}
+                          className={`flex ${isOwnMessage(msg.author) ? "justify-end" : "justify-start"}`}
+                        >
+                          {!isOwnMessage(msg.author) && (
+                            <div className="mr-2 mt-1">
+                              {showHostAvatar && hostAvatarUrl ? (
+                                <img
+                                  src={hostAvatarUrl}
+                                  alt={hostDisplayName}
+                                  className="h-7 w-7 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-semibold text-emerald-800">
+                                  {showHostAvatar ? getInitials(hostDisplayName) : "—"}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          <div
+                            className={`max-w-[75%] rounded-2xl px-4 py-2 shadow-sm ${
+                              isOwnMessage(msg.author)
+                                ? "bg-emerald-600 text-white"
+                                : "bg-white text-slate-900"
+                            }`}
+                          >
+                            <p className="text-[11px] font-semibold opacity-70">
+                              {getAuthorLabel(msg.author)}
+                            </p>
+                          {msg.mediaUrl && (
+                            <div className="mt-2 overflow-hidden rounded-xl">
                               <img
-                                src={hostAvatarUrl}
-                                alt={hostDisplayName}
-                                className="h-7 w-7 rounded-full object-cover"
+                                src={msg.mediaUrl}
+                                alt="Shared image"
+                                className="h-auto w-64 max-w-full rounded-xl object-cover"
+                                onError={() => refreshMediaUrl(msg)}
                               />
-                            ) : (
-                              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-semibold text-emerald-800">
-                                {showHostAvatar ? getInitials(hostDisplayName) : "—"}
+                            </div>
+                          )}
+                            {msg.body && <p className="text-sm">{msg.body}</p>}
+                            {msg.dateCreated && (
+                              <div className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-70">
+                                <span>{new Date(msg.dateCreated).toLocaleString()}</span>
+                                {isOwnMessage(msg.author) &&
+                                  renderDeliveryStatus(msg.deliveryStatus)}
                               </div>
                             )}
                           </div>
-                        )}
-                        <div
-                          className={`max-w-[75%] rounded-2xl px-4 py-2 shadow-sm ${
-                            isOwnMessage(msg.author)
-                              ? "bg-emerald-600 text-white"
-                              : "bg-white text-slate-900"
-                          }`}
-                        >
-                          <p className="text-[11px] font-semibold opacity-70">
-                            {getAuthorLabel(msg.author)}
-                          </p>
-                          <p className="text-sm">{msg.body}</p>
-                          {msg.dateCreated && (
-                            <div className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-70">
-                              <span>{new Date(msg.dateCreated).toLocaleString()}</span>
-                              {isOwnMessage(msg.author) && renderDeliveryStatus(msg.deliveryStatus)}
-                            </div>
-                          )}
                         </div>
-                      </div>
-                    );
+                      );
                     })
                   ) : (
                     <p className="text-slate-500">No messages yet.</p>
@@ -751,6 +946,21 @@ export default function ChatPanel({
                   className="flex flex-col gap-3 border-t border-emerald-100 bg-white/90 px-5 py-4 md:flex-row"
                   onSubmit={handleSendMessage}
                 >
+                  <input
+                    ref={mediaInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleMediaChange}
+                  />
+                  <Button
+                    type="secondary"
+                    className="rounded-full border-emerald-100 bg-white px-4 py-2 text-xs text-emerald-900"
+                    disabled={mediaUploading}
+                    onClick={() => mediaInputRef.current?.click()}
+                  >
+                    {mediaUploading ? "Uploading..." : "Add image"}
+                  </Button>
                   <Input
                     className="flex-1 rounded-full border-emerald-100 bg-white px-4 py-2 focus-visible:ring-emerald-200"
                     placeholder="Type a message..."
@@ -769,7 +979,9 @@ export default function ChatPanel({
               </>
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-16 text-center text-sm text-slate-500">
-                <p className="text-base font-semibold text-slate-700">Select a conversation</p>
+                <p className="text-base font-semibold text-slate-700">
+                  Select a conversation
+                </p>
                 <p>Pick a chat on the left or open a booking.</p>
               </div>
             )}
@@ -781,43 +993,91 @@ export default function ChatPanel({
     </div>
   );
 }
-  const renderDeliveryStatus = (status?: MessageRow["deliveryStatus"]) => {
-    if (!status) return null;
-    if (status === "sending") {
-      return (
-        <span className="inline-flex h-3 w-3 items-center justify-center">
-          <svg viewBox="0 0 16 16" className="h-3 w-3 text-current">
-            <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M8 4.5v3.8l2.6 1.7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-        </span>
-      );
-    }
-    if (status === "read") {
-      return (
-        <span className="inline-flex h-3 w-5 items-center justify-center text-sky-200">
-          <svg viewBox="0 0 20 16" className="h-3 w-5">
-            <path d="M2 8.5l3 3.2 6-6.7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M9 11l6-6.7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
-      );
-    }
-    if (status === "delivered") {
-      return (
-        <span className="inline-flex h-3 w-5 items-center justify-center text-white/80">
-          <svg viewBox="0 0 20 16" className="h-3 w-5">
-            <path d="M2 8.5l3 3.2 6-6.7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M9 11l6-6.7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
-      );
-    }
+const renderDeliveryStatus = (status?: MessageRow["deliveryStatus"]) => {
+  if (!status) return null;
+  if (status === "sending") {
     return (
-      <span className="inline-flex h-3 w-3 items-center justify-center text-white/80">
-        <svg viewBox="0 0 16 16" className="h-3 w-3">
-          <path d="M2.5 8.5l3 3.2 7-7.4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <span className="inline-flex h-3 w-3 items-center justify-center">
+        <svg viewBox="0 0 16 16" className="h-3 w-3 text-current">
+          <circle
+            cx="8"
+            cy="8"
+            r="6.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          />
+          <path
+            d="M8 4.5v3.8l2.6 1.7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
         </svg>
       </span>
     );
-  };
+  }
+  if (status === "read") {
+    return (
+      <span className="inline-flex h-3 w-5 items-center justify-center text-sky-200">
+        <svg viewBox="0 0 20 16" className="h-3 w-5">
+          <path
+            d="M2 8.5l3 3.2 6-6.7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M9 11l6-6.7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </span>
+    );
+  }
+  if (status === "delivered") {
+    return (
+      <span className="inline-flex h-3 w-5 items-center justify-center text-white/80">
+        <svg viewBox="0 0 20 16" className="h-3 w-5">
+          <path
+            d="M2 8.5l3 3.2 6-6.7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M9 11l6-6.7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex h-3 w-3 items-center justify-center text-white/80">
+      <svg viewBox="0 0 16 16" className="h-3 w-3">
+        <path
+          d="M2.5 8.5l3 3.2 7-7.4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  );
+};

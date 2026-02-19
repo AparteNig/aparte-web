@@ -44,6 +44,7 @@ export type AdminListingRow = {
     country: string | null;
     status: string;
     nightlyPrice: number;
+    cautionFee: number;
     reviewNotes: string | null;
     updatedAt: string;
     createdAt: string;
@@ -53,6 +54,7 @@ export type AdminListingRow = {
     email: string;
     fullName: string | null;
     onboardingStatus: string;
+    adminApprovalStatus: "pending" | "approved" | "rejected";
   } | null;
 };
 
@@ -93,7 +95,12 @@ export type AdminPayoutRequest = {
   hostId: number;
   amount: number;
   currency: string;
-  status: "pending" | "approved" | "rejected" | "paid" | "failed";
+  status: "pending" | "processing" | "approved" | "rejected" | "paid" | "failed";
+  payoutBankName: string | null;
+  payoutBankCode: string | null;
+  payoutAccountName: string | null;
+  payoutAccountNumber: string | null;
+  payoutRoutingNumber: string | null;
   reason: string | null;
   adminNotes: string | null;
   approvedByAdminId: number | null;

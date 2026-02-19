@@ -7,6 +7,7 @@ import Button from "@/components/general/Button";
 import LoadingOverlay from "@/components/general/LoadingOverlay";
 import Modal from "@/components/general/ui/modal/Modal";
 import { Input } from "@/components/ui/input";
+import AddressAutocompleteInput from "@/components/general/form/AddressAutocompleteInput";
 import PhoneInput from "@/components/general/form/PhoneInput";
 import { useUpdateHostProfileMutation, useUploadHostAvatarMutation } from "@/hooks/use-host-profile";
 import type { HostProfile } from "@/types/host";
@@ -162,7 +163,10 @@ export const ProfileSetupModal = ({ open, profile }: ProfileSetupModalProps) => 
             </label>
             <label className="space-y-2 md:col-span-2">
               <span className="font-semibold">Address line 1</span>
-              <Input placeholder="1 Admiralty Way" {...register("addressLine1", { required: true })} />
+              <AddressAutocompleteInput
+                placeholder="1 Admiralty Way"
+                {...register("addressLine1", { required: true })}
+              />
             </label>
             <label className="space-y-2 md:col-span-1">
               <span className="font-semibold">City</span>

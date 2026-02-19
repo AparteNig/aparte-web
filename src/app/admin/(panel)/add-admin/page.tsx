@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 import Button from "@/components/general/Button";
+import AddressAutocompleteInputField from "@/components/general/form/AddressAutocompleteInputField";
 import InputField from "@/components/general/form/InputField";
 import Modal from "@/components/general/ui/modal/Modal";
 import { useAdminProfileQuery, useInviteAdminMutation } from "@/hooks/admin/use-admin-data";
@@ -114,8 +115,16 @@ export default function AddAdminPage() {
         />
         <InputField label="Full name" placeholder="Jane Admin" {...register("fullName")} />
         <InputField label="Phone" placeholder="+234…" {...register("phone")} />
-        <InputField label="Address line 1" placeholder="123 Admin Way" {...register("addressLine1")} />
-        <InputField label="Address line 2" placeholder="Suite 5" {...register("addressLine2")} />
+        <AddressAutocompleteInputField
+          label="Address line 1"
+          placeholder="123 Admin Way"
+          {...register("addressLine1")}
+        />
+        <AddressAutocompleteInputField
+          label="Address line 2"
+          placeholder="Suite 5"
+          {...register("addressLine2")}
+        />
         <InputField label="City" placeholder="Lagos" {...register("city")} />
         <InputField label="State" placeholder="Lagos" {...register("state")} />
         <InputField label="Country" placeholder="Nigeria" {...register("country")} />

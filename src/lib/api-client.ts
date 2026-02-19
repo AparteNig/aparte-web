@@ -122,8 +122,14 @@ export type UserLoginOtpResponse = {
 
 export type UserLoginResponse = UserLoginSuccessResponse | UserLoginOtpResponse;
 
+export type RegistrationOtpResponse = {
+  requiresOtp: true;
+  otpId: number;
+  devPreview?: string;
+};
+
 export const registerHost = (payload: { email: string; phone: string; password: string }) =>
-  apiFetch<{ hostProfile: HostProfile }>("/auth/hosts/register", {
+  apiFetch<{ hostProfile: HostProfile } & RegistrationOtpResponse>("/auth/hosts/register", {
     method: "POST",
     body: JSON.stringify(payload),
     auth: false,
@@ -247,6 +253,72 @@ export const getHostListing = (listingId: number) =>
   apiFetch<{ listing: HostListingDetail }>(`/hosts/listings/${listingId}`, {
     method: "GET",
   });
+
+export const getHostPayoutSummary = (period?: "daily" | "weekly" | "monthly") =>
+  apiFetch<{
+    availableBalance: number;
+    todaysEarnings: number;
+    monthTotal: number;
+    period: string;
+    periodStart: string;
+    periodEnd: string;
+    periodTotal: number;
+    payoutHistory: Array<{
+      booking: {
+        id: number;
+        listingId: number;
+        listingTitle: string;
+        guestName: string;
+        startDate: string;
+        endDate: string;
+        status: string;
+      };
+      entries: Array<{ date: string; dailyRate: number; total: number }>;
+    }>;
+    aggregatedPayout: {
+      period: string;
+      total: number;
+      currency: string;
+      bookingCount: number;
+    };
+    withdrawalHistory: Array<{
+      id: number;
+      amount: number;
+      currency: string;
+      status: string;
+      payoutBankName: string | null;
+      payoutBankCode: string | null;
+      payoutAccountName: string | null;
+      payoutAccountNumber: string | null;
+      payoutRoutingNumber: string | null;
+      reason: string | null;
+      adminNotes: string | null;
+      approvedByAdminId: number | null;
+      approvedAt: string | null;
+      processedAt: string | null;
+      failureReason: string | null;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+    payoutBankDetails: {
+      bankName: string | null;
+      accountName: string | null;
+      accountNumber: string | null;
+      bankCode: string | null;
+      routingNumber: string | null;
+    };
+  }>(`/hosts/payouts/summary${period ? `?period=${period}` : ""}`, {
+    method: "GET",
+  });
+
+export const requestHostWithdrawal = (amount: number) =>
+  apiFetch<{ payoutRequest: { id: number; amount: number; status: string } }>(
+    "/hosts/payouts/withdrawals",
+    {
+      method: "POST",
+      body: JSON.stringify({ amount }),
+    },
+  );
 
 export const updateHostListing = (
   listingId: number,
@@ -502,6 +574,12 @@ export const suspendListing = (listingId: number, reason?: string) =>
 export const restoreListing = (listingId: number) =>
   adminQuery<{ listing: AdminListingRow["listing"] }>(`/admin/listings/${listingId}/restore`, {
     method: "PATCH",
+  });
+
+export const updateListingCautionFee = (listingId: number, cautionFee: number) =>
+  adminQuery<{ listing: AdminListingRow["listing"] }>(`/admin/listings/${listingId}/caution-fee`, {
+    method: "PATCH",
+    body: JSON.stringify({ cautionFee }),
   });
 
 export const getAdminBookings = () =>

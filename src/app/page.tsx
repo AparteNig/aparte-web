@@ -43,6 +43,7 @@ import InstagramIcon from "@/assets/icons/InstagramIcon";
 import XIcon from "@/assets/icons/XIcon";
 import TikTokIcon from "@/assets/icons/TikTok";
 import CaretRight from "@/assets/icons/CaretRight";
+import { showToast } from "@/components/general/ui/CustomToast";
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
@@ -63,6 +64,9 @@ export default function Home() {
   const locationsRef = useRef<HTMLDivElement | null>(null);
   const reviewsRef = useRef<HTMLDivElement | null>(null);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
+  const [waitlistEmail, setWaitlistEmail] = useState("");
+  const [waitlistPhone, setWaitlistPhone] = useState("");
+  const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
   const listings = [
     { id: "modern-loft-lagos", title: "Modern Loft", location: "Lagos", image: Listing1 },
     {
@@ -195,6 +199,48 @@ export default function Home() {
       return [words[0], words.slice(1).join(" ")].filter(Boolean);
     }
     return [words.slice(0, 2).join(" "), words.slice(2).join(" ")];
+  };
+
+  const apiBase =
+    process.env.NEXT_PUBLIC_API_URL ?? "https://humble-liberation-staging.up.railway.app";
+
+  const handleWaitlistSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!waitlistEmail.trim()) {
+      showToast.error("Please enter a valid email.");
+      return;
+    }
+    setWaitlistSubmitting(true);
+    try {
+      const response = await fetch(
+        `${apiBase.replace(/\/$/, "")}/waitlist`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: waitlistEmail.trim(),
+            phone: waitlistPhone.trim() || undefined,
+          }),
+        },
+      );
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message =
+          payload && typeof payload === "object" && "message" in payload
+            ? (payload as { message: string }).message
+            : "Failed to join waitlist.";
+        throw new Error(message);
+      }
+      setWaitlistEmail("");
+      setWaitlistPhone("");
+      showToast.success("You're on the waitlist! We'll be in touch soon.");
+    } catch (error) {
+      showToast.error(
+        error instanceof Error ? error.message : "Failed to join waitlist.",
+      );
+    } finally {
+      setWaitlistSubmitting(false);
+    }
   };
 
   return (
@@ -794,6 +840,58 @@ export default function Home() {
             >
               Download App
             </button>
+          </div>
+        </section>
+
+        <section className="bg-[#F7F2EA] py-16">
+          <div className="mx-auto w-full max-w-5xl px-6">
+            <div className="grid gap-8 rounded-3xl border border-[#E4D9CB] bg-white/70 p-8 shadow-sm md:grid-cols-[1.1fr_0.9fr]">
+              <div className="space-y-4">
+                <p className={`${poppins.className} text-sm uppercase tracking-[0.3em] text-[#9A7D52]`}>
+                  Join the waitlist
+                </p>
+                <h3 className={`${poppins.className} text-[32px] font-semibold text-[#2A3130]`}>
+                  Be first to hear when new apartments drop.
+                </h3>
+                <p className="text-sm text-slate-600">
+                  Get early access to new listings, city launches, and exclusive stay offers. We’ll notify you
+                  as soon as we open in your area.
+                </p>
+                <div className="rounded-2xl border border-dashed border-[#E4D9CB] bg-[#FBF8F3] p-4 text-xs text-slate-600">
+                  We only use your email and phone number for Aparte updates. No spam.
+                </div>
+              </div>
+              <form className="space-y-4" onSubmit={handleWaitlistSubmit}>
+                <label className="block space-y-2 text-sm text-slate-700">
+                  <span className="font-semibold">Email address</span>
+                  <input
+                    type="email"
+                    required
+                    placeholder="you@example.com"
+                    className="w-full rounded-2xl border border-[#E0D5C6] bg-white px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C7A67A]"
+                    value={waitlistEmail}
+                    onChange={(event) => setWaitlistEmail(event.target.value)}
+                  />
+                </label>
+                <label className="block space-y-2 text-sm text-slate-700">
+                  <span className="font-semibold">Phone number</span>
+                  <input
+                    type="tel"
+                    placeholder="+234 801 234 5678"
+                    className="w-full rounded-2xl border border-[#E0D5C6] bg-white px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C7A67A]"
+                    value={waitlistPhone}
+                    onChange={(event) => setWaitlistPhone(event.target.value)}
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={waitlistSubmitting}
+                  className="w-full rounded-full bg-[#2A3130] px-6 py-3 text-xs font-semibold text-white transition hover:bg-[#1F2423] disabled:bg-slate-400"
+                >
+                  {waitlistSubmitting ? "Joining..." : "Join waitlist"}
+                </button>
+              </form>
+            </div>
           </div>
         </section>
       </main>

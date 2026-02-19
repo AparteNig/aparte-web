@@ -5,6 +5,7 @@ import { Controller, useForm } from "react-hook-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Button from "@/components/general/Button";
 import { Input } from "@/components/ui/input";
+import AddressAutocompleteInput from "@/components/general/form/AddressAutocompleteInput";
 import PhoneInput from "@/components/general/form/PhoneInput";
 import type { HostOnboardingStep, HostProfile } from "@/types/host";
 import { useUpdateHostProfileMutation } from "@/hooks/use-host-profile";
@@ -196,12 +197,21 @@ export const HostSectionForm = ({ config, profile }: HostSectionFormProps) => {
             return (
               <label key={field.name as string} className="block space-y-2">
                 <span className="font-medium">{field.label}</span>
-                <Input
-                  type={field.type ?? "text"}
-                  placeholder={field.placeholder}
-                  required={field.required}
-                  {...register(field.name as string, { required: field.required })}
-                />
+                {field.name === "addressLine1" || field.name === "addressLine2" ? (
+                  <AddressAutocompleteInput
+                    type={field.type ?? "text"}
+                    placeholder={field.placeholder}
+                    required={field.required}
+                    {...register(field.name as string, { required: field.required })}
+                  />
+                ) : (
+                  <Input
+                    type={field.type ?? "text"}
+                    placeholder={field.placeholder}
+                    required={field.required}
+                    {...register(field.name as string, { required: field.required })}
+                  />
+                )}
                 {field.helperText && (
                   <p className="text-xs text-slate-500">{field.helperText}</p>
                 )}

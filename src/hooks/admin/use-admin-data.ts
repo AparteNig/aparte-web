@@ -23,6 +23,7 @@ import {
   restoreListing,
   suspendHost,
   suspendListing,
+  updateListingCautionFee,
   updateAdminBookingNotes,
   updateAdminBookingStatus,
 } from "@/lib/api-client";
@@ -165,6 +166,18 @@ export const useRestoreListingMutation = () => {
   return useMutation({
     mutationFn: (listingId: number) => restoreListing(listingId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: adminListingsQueryKey }),
+  });
+};
+
+export const useUpdateListingCautionFeeMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ listingId, cautionFee }: { listingId: number; cautionFee: number }) =>
+      updateListingCautionFee(listingId, cautionFee),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: adminListingsQueryKey });
+      queryClient.invalidateQueries({ queryKey: ["admin", "listing", variables.listingId] });
+    },
   });
 };
 

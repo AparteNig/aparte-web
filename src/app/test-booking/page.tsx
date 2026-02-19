@@ -514,8 +514,8 @@ export default function TestBookingPage() {
                 <p className="font-semibold text-slate-900">{selectedListing.title}</p>
                 <p>
                   {selectedListing.city}, {selectedListing.country} · ₦
-                  {selectedListing.nightlyPrice.toLocaleString()} per night · Guests max:{" "}
-                  {selectedListing.maxGuests}
+                  {selectedListing.nightlyPrice.toLocaleString()} per night · Caution ₦
+                  {(selectedListing.cautionFee ?? 0).toLocaleString()} · Guests max: {selectedListing.maxGuests}
                 </p>
               </div>
             )}

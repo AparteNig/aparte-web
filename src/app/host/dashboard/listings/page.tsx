@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 
 import { Input } from "@/components/ui/input";
+import AddressAutocompleteInput from "@/components/general/form/AddressAutocompleteInput";
 import Button from "@/components/general/Button";
 import LoadingOverlay from "@/components/general/LoadingOverlay";
 import Modal from "@/components/general/ui/modal/Modal";
@@ -267,7 +268,7 @@ export default function HostListingsPage() {
                 </label>
                 <label className="space-y-2 text-sm">
                   <span className="font-semibold text-slate-800">Address line 1</span>
-                  <Input
+                  <AddressAutocompleteInput
                     placeholder="1 Admiralty Way"
                     {...register("addressLine1", { required: true })}
                   />
@@ -473,7 +474,8 @@ export default function HostListingsPage() {
                   <div className="flex flex-col gap-1">
                     <CardTitle>{listing.title}</CardTitle>
                     <p className="text-sm text-slate-500">
-                      {listing.city}, {listing.country} · ₦{listing.nightlyPrice.toLocaleString()}
+                      {listing.city}, {listing.country} · ₦{listing.nightlyPrice.toLocaleString()} ·
+                      Caution ₦{(listing.cautionFee ?? 0).toLocaleString()}
                     </p>
                   </div>
                   <span
