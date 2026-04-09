@@ -8,6 +8,7 @@ const navItems: NavItem[] = [
   { label: "Overview", href: "/admin/dashboard", icon: "dashboard" },
   { label: "Landlords", href: "/admin/hosts", icon: "users" },
   { label: "Listings", href: "/admin/listings", icon: "listings" },
+  { label: "Vehicles", href: "/admin/vehicles", icon: "vehicles" },
   { label: "Bookings", href: "/admin/bookings", icon: "bookings" },
   { label: "Payouts", href: "/admin/payouts", icon: "payouts" },
   { label: "Messages", href: "/admin/messages", icon: "messages" },

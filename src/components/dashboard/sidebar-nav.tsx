@@ -23,13 +23,15 @@ import {
   TickIcon,
   NotificationIcon,
   AccountIcon,
-  CalendarIcon
+  CalendarIcon,
+  DriversIcon
 } from "@/assets/icons";
 import LandingLogo from "@/assets/landing/Logo.png";
 
 const iconRegistry = {
   dashboard: DashboardIcon,
   listings: HomeIcon,
+  vehicles: DriversIcon,
   calendar: CalendarIcon,
   messages: MessageCenterIocn,
   payouts: WalletIcon,

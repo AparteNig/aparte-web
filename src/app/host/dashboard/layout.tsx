@@ -13,6 +13,7 @@ import { ResponsiveGate } from "@/components/layout/responsive-gate";
 const navItems: NavItem[] = [
   { label: "Overview", href: "/host/dashboard", icon: "dashboard" },
   { label: "Listings", href: "/host/dashboard/listings", icon: "listings" },
+  { label: "Vehicles", href: "/host/dashboard/vehicles", icon: "vehicles" },
   { label: "Calendar", href: "/host/dashboard/calendar", icon: "calendar" },
   { label: "Bookings", href: "/host/dashboard/bookings", icon: "bookings" },
   { label: "Messages", href: "/host/dashboard/messages", icon: "messages" },

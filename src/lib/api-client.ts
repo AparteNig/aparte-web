@@ -17,6 +17,7 @@ import type {
   AdminPayoutRequest,
   AdminProfile,
 } from "@/types/admin";
+import type { AdminVehicleRow, HostVehicle, VehicleCalendarBlock, VehiclePhotoPayload } from "@/types/vehicle";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "https://humble-liberation-staging.up.railway.app";
@@ -226,6 +227,17 @@ export const uploadListingAsset = (listingId: number, file: File) => {
   formData.append("file", file);
   formData.append("type", "listing");
   formData.append("entityId", String(listingId));
+  return apiFetch<{ key: string; url: string }>("/uploads", {
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const uploadVehicleAsset = (vehicleId: number, file: File) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("type", "vehicle");
+  formData.append("entityId", String(vehicleId));
   return apiFetch<{ key: string; url: string }>("/uploads", {
     method: "POST",
     body: formData,
@@ -474,6 +486,41 @@ export const completeCustomerBooking = (bookingId: number) =>
     auth: false,
   });
 
+// ── Host Vehicle API ──────────────────────────────────────────
+
+export const getHostVehicles = (status?: string) =>
+  apiFetch<{ vehicles: HostVehicle[] }>(`/hosts/vehicles${status ? `?status=${status}` : ""}`, { method: "GET" });
+
+export const createHostVehicle = (payload: Partial<HostVehicle>) =>
+  apiFetch<{ vehicle: HostVehicle }>("/hosts/vehicles", { method: "POST", body: JSON.stringify(payload) });
+
+export const getHostVehicle = (vehicleId: number) =>
+  apiFetch<{ vehicle: HostVehicle }>(`/hosts/vehicles/${vehicleId}`, { method: "GET" });
+
+export const updateHostVehicle = (vehicleId: number, payload: Partial<HostVehicle>) =>
+  apiFetch<{ vehicle: HostVehicle }>(`/hosts/vehicles/${vehicleId}`, { method: "PATCH", body: JSON.stringify(payload) });
+
+export const submitHostVehicle = (vehicleId: number) =>
+  apiFetch<{ vehicle: HostVehicle; message: string }>(`/hosts/vehicles/${vehicleId}/submit`, { method: "POST" });
+
+export const deleteHostVehicle = (vehicleId: number) =>
+  apiFetch<void>(`/hosts/vehicles/${vehicleId}`, { method: "DELETE" });
+
+export const addVehiclePhotos = (vehicleId: number, photos: VehiclePhotoPayload[]) =>
+  apiFetch<{ vehicle: HostVehicle }>(`/hosts/vehicles/${vehicleId}/photos`, { method: "POST", body: JSON.stringify({ photos }) });
+
+export const deleteVehiclePhoto = (vehicleId: number, photoId: number) =>
+  apiFetch<{ vehicle: HostVehicle }>(`/hosts/vehicles/${vehicleId}/photos/${photoId}`, { method: "DELETE" });
+
+export const getVehicleCalendar = (vehicleId: number) =>
+  apiFetch<{ blocks: VehicleCalendarBlock[] }>(`/hosts/vehicles/${vehicleId}/calendar`, { method: "GET" });
+
+export const addVehicleCalendarBlock = (vehicleId: number, payload: { startDate: string; endDate: string; reason?: string }) =>
+  apiFetch<{ block: VehicleCalendarBlock }>(`/hosts/vehicles/${vehicleId}/calendar`, { method: "POST", body: JSON.stringify(payload) });
+
+export const deleteVehicleCalendarBlock = (vehicleId: number, blockId: number) =>
+  apiFetch<{ blocks: VehicleCalendarBlock[] }>(`/hosts/vehicles/${vehicleId}/calendar/${blockId}`, { method: "DELETE" });
+
 const adminQuery = <T>(path: string, options: ApiFetchOptions = {}) =>
   apiFetch<T>(path, { ...options, authCookie: "admin" });
 
@@ -645,3 +692,38 @@ export const getAdminAuditLogs = (params?: {
   const url = `/admin/audit-logs${query.toString() ? `?${query.toString()}` : ""}`;
   return adminQuery<{ entries: AdminAuditLog[] }>(url).then((res) => res.entries);
 };
+
+
+// ── Admin Vehicle API ─────────────────────────────────────────
+
+export const getAdminVehicles = (params?: { status?: string; hostId?: number }) => {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set("status", params.status);
+  if (params?.hostId) qs.set("hostId", String(params.hostId));
+  const query = qs.toString();
+  return adminQuery<{ vehicles: AdminVehicleRow[] }>(`/admin/vehicles${query ? `?${query}` : ""}`);
+};
+
+export const getAdminVehicleDetail = (vehicleId: number) =>
+  adminQuery<{ vehicle: HostVehicle; host: AdminVehicleRow["host"] }>(`/admin/vehicles/${vehicleId}`);
+
+export const reviewAdminVehicle = (vehicleId: number, action: "approve" | "reject", reviewNotes?: string) =>
+  adminQuery<{ vehicle: HostVehicle; status: string }>(`/admin/vehicles/${vehicleId}/review`, {
+    method: "PATCH",
+    body: JSON.stringify({ action, reviewNotes }),
+  });
+
+export const suspendAdminVehicle = (vehicleId: number, reason?: string) =>
+  adminQuery<{ vehicle: HostVehicle; status: string }>(`/admin/vehicles/${vehicleId}/suspend`, {
+    method: "PATCH",
+    body: JSON.stringify({ reason }),
+  });
+
+export const unsuspendAdminVehicle = (vehicleId: number) =>
+  adminQuery<{ vehicle: HostVehicle; status: string }>(`/admin/vehicles/${vehicleId}/unsuspend`, { method: "PATCH" });
+
+export const editAdminVehicle = (vehicleId: number, payload: Partial<HostVehicle>) =>
+  adminQuery<{ vehicle: HostVehicle }>(`/admin/vehicles/${vehicleId}/edit`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
