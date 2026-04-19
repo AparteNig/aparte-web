@@ -1,36 +1,38 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  FormEvent,
+  useEffect,
+  useRef,
+  useState
+} from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type {
-  Client as ConversationsClient,
-  Conversation,
-  Message,
-} from "@twilio/conversations";
-import { Client } from "@twilio/conversations";
 
 import Button from "@/components/general/Button";
 import { Input } from "@/components/ui/input";
 import { getIdentityFromToken } from "@/lib/token-utils";
+import {
+  useConversationSocketContext,
+  type MessageNew
+} from "@/contexts/ConversationSocketContext";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "https://humble-liberation-staging.up.railway.app";
 
 type MessageRow = {
-  sid: string;
-  author: string;
-  body: string;
-  dateCreated?: string;
+  id: number;
   localId?: string;
+  author: string;
+  body: string | null;
+  createdAt?: string;
   mediaUrl?: string;
-  mediaContentType?: string;
   mediaKey?: string;
-  deliveryStatus?: "sending" | "sent" | "delivered" | "read";
+  deliveryStatus?: "sending" | "sent";
 };
 
 type ConversationSummary = {
   id: number;
-  twilioSid: string;
   bookingId: number | null;
   hostId: number | null;
   userId: number | null;
@@ -65,15 +67,15 @@ const buildUrl = (path: string) =>
 const fetchWithAuth = async <T,>(
   path: string,
   token: string,
-  options: RequestInit = {},
+  options: RequestInit = {}
 ) => {
   const response = await fetch(buildUrl(path), {
     ...options,
     headers: {
       "Content-Type": "application/json",
       ...(options.headers ?? {}),
-      Authorization: `Bearer ${token}`,
-    },
+      Authorization: `Bearer ${token}`
+    }
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
@@ -86,29 +88,63 @@ const fetchWithAuth = async <T,>(
   return payload as T;
 };
 
-const imageMarkerPrefix = "__image__:";
+type ApiMessage = {
+  id: number;
+  conversationId: number;
+  senderType: string;
+  senderId: number;
+  body: string | null;
+  mediaKey?: string | null;
+  createdAt: string;
+};
 
-const parseMediaBody = (body: string) => {
-  if (body.startsWith(imageMarkerPrefix)) {
-    const value = body.slice(imageMarkerPrefix.length).trim();
-    if (value.startsWith("http")) {
-      return { mediaUrl: value, mediaKey: undefined, body: "" };
-    }
-    return { mediaUrl: undefined, mediaKey: value, body: "" };
+const apiMessageToRow = async (
+  m: ApiMessage,
+  token: string | null
+): Promise<MessageRow> => {
+  const author = `${m.senderType}_${m.senderId}`;
+  let mediaUrl: string | undefined;
+  if (m.mediaKey && token) {
+    try {
+      const signed = await fetchWithAuth<{ url: string }>(
+        `/uploads/signed-url?key=${encodeURIComponent(m.mediaKey)}`,
+        token,
+        { method: "GET" }
+      );
+      mediaUrl = signed.url;
+    } catch { /* ignore — will refresh on image error */ }
   }
-  return { mediaUrl: undefined, mediaKey: undefined, body };
+  return { id: m.id, author, body: m.body, createdAt: m.createdAt, mediaUrl, mediaKey: m.mediaKey ?? undefined, deliveryStatus: "sent" };
+};
+
+const socketMessageToRow = async (
+  msg: MessageNew,
+  token: string | null
+): Promise<MessageRow> => {
+  const author = `${msg.senderType}_${msg.senderId}`;
+  let mediaUrl: string | undefined;
+  if (msg.mediaKey && token) {
+    try {
+      const signed = await fetchWithAuth<{ url: string }>(
+        `/uploads/signed-url?key=${encodeURIComponent(msg.mediaKey)}`,
+        token,
+        { method: "GET" }
+      );
+      mediaUrl = signed.url;
+    } catch { /* ignore */ }
+  }
+  return { id: msg.id, author, body: msg.body, createdAt: msg.createdAt, mediaUrl, mediaKey: msg.mediaKey, deliveryStatus: "sent" };
 };
 
 export default function ChatPanel({
   token,
   title,
   allowAdminDirect,
-  initialBookingId,
+  initialBookingId
 }: ChatPanelProps) {
   const [bookingId, setBookingId] = useState("");
   const [hostId, setHostId] = useState("");
   const [userId, setUserId] = useState("");
-  const [conversationSid, setConversationSid] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [showList, setShowList] = useState(true);
   const [message, setMessage] = useState("");
@@ -116,14 +152,13 @@ export default function ChatPanel({
   const [error, setError] = useState<string | null>(null);
   const [realtimeMessages, setRealtimeMessages] = useState<MessageRow[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
-  const [connectionState, setConnectionState] = useState<string>("disconnected");
-  const clientRef = useRef<ConversationsClient | null>(null);
-  const conversationRef = useRef<Conversation | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const reconnectingRef = useRef(false);
   const mediaInputRef = useRef<HTMLInputElement | null>(null);
 
-  const identity = useMemo(() => (token ? getIdentityFromToken(token) : null), [token]);
+  const identity = token ? getIdentityFromToken(token) : null;
+  const { socket, sendMessage: socketSend, markRead, joinRoom } = useConversationSocketContext();
 
   const conversationsQuery = useQuery<ConversationSummary[]>({
     queryKey: ["conversations", token],
@@ -132,507 +167,291 @@ export default function ChatPanel({
       const data = await fetchWithAuth<{ conversations: ConversationSummary[] }>(
         "/conversations",
         token,
-        { method: "GET" },
+        { method: "GET" }
       );
       return data.conversations;
     },
     enabled: Boolean(token),
-    staleTime: 1000 * 30,
+    staleTime: 1000 * 30
   });
 
-  const fetchTwilioToken = async () => {
-    if (!token) throw new Error("Missing auth token");
-    const response = await fetchWithAuth<{ token: string }>(
-      "/conversations/token",
-      token,
-      { method: "POST" },
-    );
-    return response.token;
-  };
-
-  const initTwilioClient = async (twilioToken: string) => {
-    if (clientRef.current) {
-      clientRef.current.removeAllListeners();
-      clientRef.current.shutdown();
-    }
-    const client = new Client(twilioToken);
-    clientRef.current = client;
-    client.on("stateChanged", (state) => {
-      if (state === "failed") {
-        setError("Failed to initialize chat.");
-      }
-    });
-    client.on("connectionStateChanged", (state) => {
-      setConnectionState(state);
-    });
-    client.on("tokenAboutToExpire", async () => {
-      try {
-        const refreshed = await fetchTwilioToken();
-        await client.updateToken(refreshed);
-      } catch (err) {
-        console.error("[chat] token refresh failed", err);
-      }
-    });
-    client.on("tokenExpired", async () => {
-      try {
-        const refreshed = await fetchTwilioToken();
-        await initTwilioClient(refreshed);
-      } catch (err) {
-        console.error("[chat] token expired refresh failed", err);
-      }
-    });
-  };
-
-  const refreshTwilioClient = async () => {
-    if (reconnectingRef.current) return;
-    reconnectingRef.current = true;
-    try {
-      const twilioToken = await fetchTwilioToken();
-      if (!clientRef.current) {
-        await initTwilioClient(twilioToken);
-      } else {
-        try {
-          await clientRef.current.updateToken(twilioToken);
-        } catch (err) {
-          console.error("[chat] token update failed, reinitializing", err);
-          await initTwilioClient(twilioToken);
-        }
-      }
-      if (conversationSid && clientRef.current) {
-        try {
-          conversationRef.current =
-            await clientRef.current.getConversationBySid(conversationSid);
-        } catch (err) {
-          console.error("[chat] reload conversation failed", err);
-        }
-      }
-    } finally {
-      reconnectingRef.current = false;
-    }
-  };
-
+  // Load initial messages when conversation opens
   useEffect(() => {
+    if (conversationId === null || !token) return;
     let cancelled = false;
-    const initClient = async () => {
-      if (!token) return;
-      try {
-        const twilioToken = await fetchTwilioToken();
+    setMessagesLoading(true);
+    setRealtimeMessages([]);
+    fetchWithAuth<{ messages: ApiMessage[]; hasMore: boolean }>(
+      `/conversations/${conversationId}/messages?limit=50`,
+      token,
+      { method: "GET" }
+    )
+      .then(async (data) => {
         if (cancelled) return;
-        await initTwilioClient(twilioToken);
-      } catch (err) {
-        console.error("[chat] init client failed", err);
-        setError(err instanceof Error ? err.message : "Failed to initialize chat.");
-      }
-    };
-
-    initClient();
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
-
-  const mapTwilioMessage = async (msg: Message): Promise<MessageRow> => {
-    const parsed = parseMediaBody(msg.body ?? "");
-    let mediaUrl = parsed.mediaUrl;
-    if (!mediaUrl && parsed.mediaKey && token) {
-      try {
-        const signed = await fetchWithAuth<{ url: string }>(
-          `/uploads/signed-url?key=${encodeURIComponent(parsed.mediaKey)}`,
-          token,
-          { method: "GET" },
-        );
-        mediaUrl = signed.url;
-      } catch (err) {
-        console.error("[chat] media signed url failed", err);
-      }
-    }
-    return {
-      sid: msg.sid,
-      author: msg.author ?? "",
-      body: parsed.body,
-      dateCreated: msg.dateCreated?.toISOString(),
-      mediaUrl,
-      mediaKey: parsed.mediaKey,
-      deliveryStatus: "sent",
-    };
-  };
-
-  useEffect(() => {
-    let active = true;
-    const loadConversation = async () => {
-      if (!conversationSid || !clientRef.current) return;
-      setMessagesLoading(true);
-      try {
-        const conversation =
-          await clientRef.current.getConversationBySid(conversationSid);
-        if (!active) return;
-        if (conversationRef.current) {
-          conversationRef.current.removeAllListeners("messageAdded");
+        const rows = await Promise.all(data.messages.map((m) => apiMessageToRow(m, token)));
+        if (!cancelled) {
+          setRealtimeMessages(rows);
+          setHasMore(data.hasMore);
         }
-        conversationRef.current = conversation;
-        const messages = await conversation.getMessages(50);
-        if (!active) return;
-        const mapped = await Promise.all(messages.items.map(mapTwilioMessage));
-        if (!active) return;
-        setRealtimeMessages(mapped);
-        conversation.on("messageAdded", async (msg: Message) => {
-          const mappedMessage = await mapTwilioMessage(msg);
-          setRealtimeMessages((prev) => {
-            if (prev.some((item) => item.sid === msg.sid)) {
-              return prev;
-            }
-            const optimisticMatch = prev.find(
-              (item) =>
-                item.localId &&
-                item.deliveryStatus === "sending" &&
-                item.author === (msg.author ?? "") &&
-                item.body === (msg.body ?? ""),
-            );
-            const fallbackOptimistic = prev.find(
-              (item) =>
-                item.localId &&
-                item.deliveryStatus === "sending" &&
-                item.author === (msg.author ?? "") &&
-                ((item.mediaKey && item.mediaKey === mappedMessage.mediaKey) ||
-                  (item.mediaUrl && !item.body)),
-            );
-            const match = optimisticMatch ?? fallbackOptimistic;
-            if (match) {
-              return prev.map((item) =>
-                item.localId === match.localId
-                  ? { ...mappedMessage, localId: item.localId }
-                  : item,
-              );
-            }
-            return [...prev, mappedMessage];
-          });
-        });
-      } catch (err) {
-        console.error("[chat] load conversation failed", err);
-        setError(err instanceof Error ? err.message : "Failed to load conversation.");
-      } finally {
-        if (active) setMessagesLoading(false);
-      }
-    };
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load messages.");
+      })
+      .finally(() => { if (!cancelled) setMessagesLoading(false); });
+    return () => { cancelled = true; };
+  }, [conversationId, token]);
 
-    loadConversation();
-    return () => {
-      active = false;
-      if (conversationRef.current) {
-        conversationRef.current.removeAllListeners("messageAdded");
-      }
+  // Subscribe to real-time messages from socket
+  useEffect(() => {
+    if (!socket || conversationId === null) return;
+    const handler = async (msg: MessageNew) => {
+      if (msg.conversationId !== conversationId) return;
+      const row = await socketMessageToRow(msg, token);
+      setRealtimeMessages((prev) => {
+        if (prev.some((item) => item.id === msg.id && item.id !== 0)) return prev;
+        const optimistic = prev.find(
+          (item) =>
+            item.localId &&
+            item.deliveryStatus === "sending" &&
+            item.author === `${msg.senderType}_${msg.senderId}` &&
+            (item.body === msg.body || (item.mediaKey && item.mediaKey === msg.mediaKey))
+        );
+        if (optimistic) {
+          return prev.map((item) =>
+            item.localId === optimistic.localId ? { ...row, localId: item.localId } : item
+          );
+        }
+        return [...prev, row];
+      });
     };
-  }, [conversationSid]);
+    socket.on("message:new", handler);
+    return () => { socket.off("message:new", handler); };
+  }, [socket, conversationId, token]);
 
+  // Mark conversation as read when opened
+  useEffect(() => {
+    if (conversationId !== null) markRead(conversationId);
+  }, [conversationId, markRead]);
+
+  // Scroll to bottom on new message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [realtimeMessages.length, conversationSid]);
+  }, [realtimeMessages.length, conversationId]);
+
+  // Auto-open from URL param
+  useEffect(() => {
+    if (!initialBookingId || !token) return;
+    openByBookingMutation.mutate(String(initialBookingId));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialBookingId, token]);
+
+  const loadOlderMessages = async () => {
+    if (!token || conversationId === null || !hasMore || loadingOlder) return;
+    const oldest = realtimeMessages[0];
+    if (!oldest) return;
+    setLoadingOlder(true);
+    try {
+      const data = await fetchWithAuth<{ messages: ApiMessage[]; hasMore: boolean }>(
+        `/conversations/${conversationId}/messages?before=${oldest.id}&limit=50`,
+        token,
+        { method: "GET" }
+      );
+      const rows = await Promise.all(data.messages.map((m) => apiMessageToRow(m, token)));
+      setRealtimeMessages((prev) => [...rows, ...prev]);
+      setHasMore(data.hasMore);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load older messages.");
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
 
   const openByBookingMutation = useMutation({
     mutationFn: async (id: string) => {
       if (!token) throw new Error("Missing auth token");
-      return fetchWithAuth<{ id: number; sid: string }>(
-        `/conversations/booking/${id}`,
-        token,
-        {
-          method: "POST",
-        },
-      );
+      return fetchWithAuth<{ id: number }>(`/conversations/booking/${id}`, token, { method: "POST" });
     },
     onSuccess: (payload) => {
-      setConversationSid(payload.sid);
       setConversationId(payload.id);
       setShowList(false);
       setError(null);
+      joinRoom(payload.id);
       conversationsQuery.refetch();
     },
     onError: (err: unknown) => {
       setError(err instanceof Error ? err.message : "Failed to open conversation.");
-    },
+    }
   });
 
   const openAdminMutation = useMutation({
     mutationFn: async (payload: { hostId?: number; userId?: number }) => {
       if (!token) throw new Error("Missing auth token");
-      return fetchWithAuth<{ id: number; sid: string }>("/conversations", token, {
+      return fetchWithAuth<{ id: number }>("/conversations", token, {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload)
       });
     },
     onSuccess: (payload) => {
-      setConversationSid(payload.sid);
       setConversationId(payload.id);
       setShowList(false);
       setError(null);
+      joinRoom(payload.id);
       conversationsQuery.refetch();
     },
     onError: (err: unknown) => {
       setError(err instanceof Error ? err.message : "Failed to open conversation.");
-    },
+    }
   });
 
-  const sendMessageMutation = useMutation({
-    mutationFn: async (payload: { author: string; body: string }) => {
-      if (!conversationSid) throw new Error("Missing conversation.");
+  const joinConversationMutation = useMutation({
+    mutationFn: async (id: number) => {
       if (!token) throw new Error("Missing auth token");
-      return fetchWithAuth<{ sid: string }>(
-        `/conversations/${conversationSid}/messages`,
-        token,
-        {
-          method: "POST",
-          body: JSON.stringify(payload),
-        },
-      );
+      return fetchWithAuth<{ status: string }>(`/conversations/${id}/join`, token, { method: "POST" });
     },
-    onSuccess: async () => {
-      if (conversationSid && token) {
-        fetchWithAuth<{ success: boolean }>(
-          `/conversations/${conversationSid}/last-message`,
-          token,
-          {
-            method: "POST",
-          },
-        ).catch((err) => {
-          console.error("[chat] last message update failed", err);
-        });
-        conversationsQuery.refetch();
-      }
+    onSuccess: () => {
+      if (conversationId !== null) joinRoom(conversationId);
+      conversationsQuery.refetch();
     },
     onError: (err: unknown) => {
-      const errorPayload =
-        err instanceof Error
-          ? { message: err.message, stack: err.stack }
-          : { error: err };
-      console.error("[chat] send message failed", {
-        ...errorPayload,
-        identity,
-        conversationSid,
-        connectionState,
-      });
-      refreshTwilioClient().catch((refreshErr) => {
-        console.error("[chat] client refresh failed after send error", refreshErr);
-      });
-      setError(err instanceof Error ? err.message : "Failed to send message.");
-    },
+      setError(err instanceof Error ? err.message : "Failed to join conversation.");
+    }
   });
 
-  const handleOpenBooking = (event: FormEvent<HTMLFormElement>) => {
+  const handleSendMessage = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
-    if (!bookingId) {
-      setError("Booking ID is required.");
-      return;
-    }
-    openByBookingMutation.mutate(bookingId);
-  };
-
-  const handleOpenBookingId = (id: number) => {
-    const idString = String(id);
-    setBookingId(idString);
-    openByBookingMutation.mutate(idString);
-  };
-
-  useEffect(() => {
-    if (!initialBookingId || !token) return;
-    handleOpenBookingId(initialBookingId);
-  }, [initialBookingId, token]);
-
-  const handleOpenAdmin = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-    if (!hostId && !userId) {
-      setError("Provide either a host ID or user ID.");
-      return;
-    }
-    if (hostId && userId) {
-      setError("Provide only one: host ID or user ID.");
-      return;
-    }
-    openAdminMutation.mutate({
-      hostId: hostId ? Number(hostId) : undefined,
-      userId: userId ? Number(userId) : undefined,
-    });
+    if (!identity) { setError("Missing identity."); return; }
+    const trimmed = message.trim();
+    if (!trimmed) { setError("Message cannot be empty."); return; }
+    if (conversationId === null) { setError("No conversation selected."); return; }
+    const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimistic: MessageRow = {
+      id: 0,
+      localId,
+      author: identity,
+      body: trimmed,
+      createdAt: new Date().toISOString(),
+      deliveryStatus: "sending"
+    };
+    setRealtimeMessages((prev) => [...prev, optimistic]);
+    setMessage("");
+    socketSend(conversationId, trimmed)
+      .then((ack) => {
+        setRealtimeMessages((prev) =>
+          prev.map((item) =>
+            item.localId === localId
+              ? { ...item, id: ack.id, deliveryStatus: "sent" as const }
+              : item
+          )
+        );
+        conversationsQuery.refetch();
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to send message.");
+      });
   };
 
   const handleSendMedia = async (file: File) => {
-    if (!identity) return;
-    if (file.size > 10 * 1024 * 1024) {
-      setError("File too large. Max size is 10MB.");
-      return;
-    }
+    if (!identity || conversationId === null || !token) return;
+    if (file.size > 10 * 1024 * 1024) { setError("File too large. Max size is 10MB."); return; }
     setError(null);
     setMediaUploading(true);
     const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const previewUrl = URL.createObjectURL(file);
     setRealtimeMessages((prev) => [
       ...prev,
-      {
-        sid: localId,
-        localId,
-        author: identity,
-        body: "",
-        dateCreated: new Date().toISOString(),
-        deliveryStatus: "sending",
-        mediaUrl: previewUrl,
-        mediaContentType: file.type,
-      },
+      { id: 0, localId, author: identity, body: null, createdAt: new Date().toISOString(), deliveryStatus: "sending", mediaUrl: previewUrl }
     ]);
     try {
-      if (!token) {
-        throw new Error("Missing conversation.");
-      }
-      const entityId = conversationId ? String(conversationId) : conversationSid;
-      if (!entityId) {
-        throw new Error("Missing conversation.");
-      }
       const formData = new FormData();
       formData.append("file", file);
       formData.append("type", "chat");
-      formData.append("entityId", entityId);
+      formData.append("entityId", String(conversationId));
       const response = await fetch(buildUrl("/uploads"), {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
-        body: formData,
+        body: formData
       });
-      const payload = await response.json().catch(() => null);
+      const uploadPayload = await response.json().catch(() => null);
       if (!response.ok) {
-        const message =
-          payload && typeof payload === "object" && "message" in payload
-            ? (payload as { message: string }).message
-            : "Upload failed";
-        throw new Error(message);
+        throw new Error(
+          uploadPayload && typeof uploadPayload === "object" && "message" in uploadPayload
+            ? (uploadPayload as { message: string }).message
+            : "Upload failed"
+        );
       }
-      const key = (payload as { key?: string }).key;
-      if (!key) {
-        throw new Error("Upload failed.");
-      }
-      const body = `${imageMarkerPrefix}${key}`;
+      const key = (uploadPayload as { key?: string }).key;
+      if (!key) throw new Error("Upload failed.");
+      const ack = await socketSend(conversationId, null, key);
       setRealtimeMessages((prev) =>
         prev.map((item) =>
           item.localId === localId
-            ? { ...item, mediaKey: key }
-            : item,
-        ),
-      );
-      if (!conversationSid) {
-        throw new Error("Missing conversation.");
-      }
-      const messageResponse = await fetchWithAuth<{ sid: string }>(
-        `/conversations/${conversationSid}/messages`,
-        token,
-        {
-          method: "POST",
-          body: JSON.stringify({ author: identity, body }),
-        },
-      );
-      setRealtimeMessages((prev) =>
-        prev.map((item) =>
-          item.localId === localId
-            ? { ...item, sid: messageResponse.sid, deliveryStatus: "sent" }
-            : item,
-        ),
+            ? { ...item, id: ack.id, mediaKey: key, deliveryStatus: "sent" as const }
+            : item
+        )
       );
     } catch (err) {
-      console.error("[chat] media send failed", err);
       setError(err instanceof Error ? err.message : "Failed to send image.");
     } finally {
       setMediaUploading(false);
     }
   };
 
-  const refreshMediaUrl = async (message: MessageRow) => {
-    if (!message.mediaKey || !token) return;
+  const refreshMediaUrl = async (msg: MessageRow) => {
+    if (!msg.mediaKey || !token) return;
     try {
       const signed = await fetchWithAuth<{ url: string }>(
-        `/uploads/signed-url?key=${encodeURIComponent(message.mediaKey)}`,
+        `/uploads/signed-url?key=${encodeURIComponent(msg.mediaKey)}`,
         token,
-        { method: "GET" },
+        { method: "GET" }
       );
       setRealtimeMessages((prev) =>
-        prev.map((item) =>
-          item.sid === message.sid ? { ...item, mediaUrl: signed.url } : item,
-        ),
+        prev.map((item) => (item.id === msg.id ? { ...item, mediaUrl: signed.url } : item))
       );
-    } catch (err) {
-      console.error("[chat] media refresh failed", err);
-    }
+    } catch { /* ignore */ }
   };
 
   const handleMediaChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     await handleSendMedia(file);
-    if (mediaInputRef.current) {
-      mediaInputRef.current.value = "";
-    }
+    if (mediaInputRef.current) mediaInputRef.current.value = "";
   };
 
-  const handleSendMessage = (event: FormEvent<HTMLFormElement>) => {
+  const handleOpenBooking = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
-    if (!identity) {
-      setError("Missing identity.");
-      return;
-    }
-    const trimmed = message.trim();
-    if (!trimmed) {
-      setError("Message cannot be empty.");
-      return;
-    }
-    const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const optimistic: MessageRow = {
-      sid: localId,
-      localId,
-      author: identity,
-      body: trimmed,
-      dateCreated: new Date().toISOString(),
-      deliveryStatus: "sending",
-    };
-    setRealtimeMessages((prev) => [...prev, optimistic]);
-    setMessage("");
-    sendMessageMutation.mutate(
-      { author: identity, body: trimmed },
-      {
-        onSuccess: (payload) => {
-          setRealtimeMessages((prev) => {
-            const updated = prev.map((item) =>
-              item.localId === localId
-                ? { ...item, sid: payload.sid, deliveryStatus: "sent" as const }
-                : item,
-            );
-            return updated.filter(
-              (item) => item.sid !== payload.sid || item.localId === localId,
-            );
-          });
-        },
-      },
-    );
+    if (!bookingId) { setError("Booking ID is required."); return; }
+    openByBookingMutation.mutate(bookingId);
+  };
+
+  const handleOpenAdmin = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    if (!hostId && !userId) { setError("Provide either a host ID or user ID."); return; }
+    if (hostId && userId) { setError("Provide only one: host ID or user ID."); return; }
+    openAdminMutation.mutate({
+      hostId: hostId ? Number(hostId) : undefined,
+      userId: userId ? Number(userId) : undefined
+    });
   };
 
   const isOwnMessage = (author?: string) => Boolean(identity && author === identity);
-  const getHostIdentity = (hostId?: number | null) => (hostId ? `host_${hostId}` : null);
+  const getHostIdentity = (hId?: number | null) => (hId ? `host_${hId}` : null);
   const getInitials = (value?: string | null) => {
     if (!value) return "?";
     const parts = value.trim().split(/\s+/);
-    return (
-      parts
-        .slice(0, 2)
-        .map((part) => part[0]?.toUpperCase())
-        .join("") || "?"
-    );
+    return parts.slice(0, 2).map((p) => p[0]?.toUpperCase()).join("") || "?";
   };
-  const activeConversation = conversationsQuery.data?.find(
-    (conversation) => conversation.twilioSid === conversationSid,
-  );
+
+  const activeConversation = conversationsQuery.data?.find((c) => c.id === conversationId);
   const hostDisplayName =
-    activeConversation?.hostDisplayName ??
-    activeConversation?.hostName ??
-    activeConversation?.hostEmail ??
-    "Host";
-  const guestDisplayName =
-    activeConversation?.guestName ?? activeConversation?.userEmail ?? "Guest";
+    activeConversation?.hostDisplayName ?? activeConversation?.hostName ?? activeConversation?.hostEmail ?? "Host";
+  const guestDisplayName = activeConversation?.guestName ?? activeConversation?.userEmail ?? "Guest";
   const hostAvatarUrl = activeConversation?.hostAvatarUrl ?? null;
   const hostIdentity = getHostIdentity(activeConversation?.hostId ?? null);
+  const isAdminMember = Boolean(activeConversation?.adminId);
+
   const getAuthorLabel = (author?: string) => {
     if (!author) return "Unknown";
     if (identity && author === identity) return "You";
@@ -659,19 +478,11 @@ export default function ChatPanel({
       {!token ? (
         <p className="text-sm text-slate-500">Sign in to load conversations.</p>
       ) : (
-        <div
-          className={
-            conversationSid && !showList
-              ? "grid gap-6"
-              : "grid gap-6 lg:grid-cols-[320px_1fr]"
-          }
-        >
-          {(!conversationSid || showList) && (
+        <div className={conversationId && !showList ? "grid gap-6" : "grid gap-6 lg:grid-cols-[320px_1fr]"}>
+          {(!conversationId || showList) && (
             <div className="space-y-4 rounded-3xl border border-emerald-100 bg-emerald-50/40 p-4">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-emerald-900">
-                  Your conversations
-                </p>
+                <p className="text-sm font-semibold text-emerald-900">Your conversations</p>
                 <Button
                   type="secondary"
                   className="rounded-2xl border-emerald-100 bg-white px-4 py-2 text-xs text-emerald-900"
@@ -680,12 +491,13 @@ export default function ChatPanel({
                   Refresh
                 </Button>
               </div>
+
               {conversationsQuery.isLoading ? (
                 <p className="text-sm text-slate-500">Loading conversations...</p>
               ) : conversationsQuery.data && conversationsQuery.data.length > 0 ? (
                 <div className="space-y-2">
                   {conversationsQuery.data.map((conversation) => {
-                    const isActive = conversation.twilioSid === conversationSid;
+                    const isActive = conversation.id === conversationId;
                     const bookingLabel = conversation.bookingId
                       ? `Booking #${conversation.bookingId}`
                       : `Conversation #${conversation.id}`;
@@ -694,9 +506,7 @@ export default function ChatPanel({
                       : null;
                     const dateLine =
                       conversation.bookingStartDate && conversation.bookingEndDate
-                        ? `${new Date(conversation.bookingStartDate).toLocaleDateString()} – ${new Date(
-                            conversation.bookingEndDate,
-                          ).toLocaleDateString()}`
+                        ? `${new Date(conversation.bookingStartDate).toLocaleDateString()} – ${new Date(conversation.bookingEndDate).toLocaleDateString()}`
                         : null;
                     const subtitleLine = conversation.guestName
                       ? `Guest ${conversation.guestName}`
@@ -715,16 +525,12 @@ export default function ChatPanel({
                         ? new Date(conversation.updatedAt).toLocaleString()
                         : null;
                     const hostLabel =
-                      conversation.hostDisplayName ??
-                      conversation.hostName ??
-                      conversation.hostEmail ??
-                      "Host";
+                      conversation.hostDisplayName ?? conversation.hostName ?? conversation.hostEmail ?? "Host";
                     return (
                       <button
                         type="button"
                         key={conversation.id}
                         onClick={() => {
-                          setConversationSid(conversation.twilioSid);
                           setConversationId(conversation.id);
                           setShowList(false);
                         }}
@@ -748,28 +554,20 @@ export default function ChatPanel({
                               </div>
                             )}
                             <div>
-                              <p className="text-sm font-semibold text-slate-800">
-                                {bookingLabel}
-                              </p>
-                              {subtitleLine && (
-                                <p className="text-xs text-slate-500">{subtitleLine}</p>
-                              )}
+                              <p className="text-sm font-semibold text-slate-800">{bookingLabel}</p>
+                              {subtitleLine && <p className="text-xs text-slate-500">{subtitleLine}</p>}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
                             {lastMessageTime && (
-                              <span className="text-[11px] text-slate-400">
-                                {lastMessageTime}
-                              </span>
+                              <span className="text-[11px] text-slate-400">{lastMessageTime}</span>
                             )}
                             <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700">
                               {conversation.status}
                             </span>
                           </div>
                         </div>
-                        {listingLine && (
-                          <p className="mt-1 text-xs text-slate-500">{listingLine}</p>
-                        )}
+                        {listingLine && <p className="mt-1 text-xs text-slate-500">{listingLine}</p>}
                         {dateLine && <p className="text-xs text-slate-400">{dateLine}</p>}
                       </button>
                     );
@@ -786,7 +584,7 @@ export default function ChatPanel({
                     className="mt-1 rounded-2xl border-emerald-100 focus-visible:ring-emerald-200"
                     placeholder="e.g. 5"
                     value={bookingId}
-                    onChange={(event) => setBookingId(event.target.value)}
+                    onChange={(e) => setBookingId(e.target.value)}
                   />
                 </label>
                 <Button
@@ -810,7 +608,7 @@ export default function ChatPanel({
                       className="mt-1 rounded-2xl border-emerald-100 focus-visible:ring-emerald-200"
                       placeholder="host id"
                       value={hostId}
-                      onChange={(event) => setHostId(event.target.value)}
+                      onChange={(e) => setHostId(e.target.value)}
                     />
                   </label>
                   <label className="text-sm font-medium text-slate-600">
@@ -819,7 +617,7 @@ export default function ChatPanel({
                       className="mt-1 rounded-2xl border-emerald-100 focus-visible:ring-emerald-200"
                       placeholder="user id"
                       value={userId}
-                      onChange={(event) => setUserId(event.target.value)}
+                      onChange={(e) => setUserId(e.target.value)}
                     />
                   </label>
                   <Button
@@ -836,7 +634,7 @@ export default function ChatPanel({
           )}
 
           <div className="rounded-3xl border border-emerald-100 bg-[#efeae2] p-0 shadow-inner">
-            {conversationSid ? (
+            {conversationId ? (
               <>
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-100 bg-white/90 px-5 py-4 backdrop-blur">
                   <div className="flex items-center gap-3">
@@ -852,19 +650,22 @@ export default function ChatPanel({
                       </div>
                     )}
                     <div>
-                      <p className="text-sm font-semibold text-slate-800">
-                        {hostDisplayName}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        Sid: {conversationSid}
-                        {conversationId ? ` · ID ${conversationId}` : ""}
-                      </p>
+                      <p className="text-sm font-semibold text-slate-800">{hostDisplayName}</p>
+                      <p className="text-xs text-slate-500">ID: {conversationId}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-slate-500">
-                      {realtimeMessages.length} messages · {connectionState}
-                    </span>
+                    <span className="text-xs text-slate-500">{realtimeMessages.length} messages</span>
+                    {allowAdminDirect && !isAdminMember && (
+                      <Button
+                        type="secondary"
+                        className="rounded-2xl border-emerald-100 bg-white px-3 py-2 text-xs text-emerald-900"
+                        disabled={joinConversationMutation.isPending}
+                        onClick={() => joinConversationMutation.mutate(conversationId)}
+                      >
+                        {joinConversationMutation.isPending ? "Joining..." : "Join conversation"}
+                      </Button>
+                    )}
                     <Button
                       type="secondary"
                       className="rounded-2xl border-emerald-100 bg-white px-3 py-2 text-xs text-emerald-900"
@@ -874,19 +675,37 @@ export default function ChatPanel({
                     </Button>
                   </div>
                 </div>
-                <div className="max-h-[520px] space-y-3 overflow-y-auto px-5 py-6 text-sm">
+
+                <div
+                  className="max-h-[520px] space-y-3 overflow-y-auto px-5 py-6 text-sm"
+                  onScroll={(e) => {
+                    if ((e.currentTarget as HTMLDivElement).scrollTop === 0) {
+                      loadOlderMessages();
+                    }
+                  }}
+                >
+                  {loadingOlder && (
+                    <p className="text-center text-xs text-slate-400">Loading older messages...</p>
+                  )}
+                  {hasMore && !loadingOlder && (
+                    <button
+                      type="button"
+                      className="w-full text-center text-xs text-emerald-600 hover:underline"
+                      onClick={loadOlderMessages}
+                    >
+                      Load older messages
+                    </button>
+                  )}
                   {messagesLoading ? (
                     <p className="text-slate-500">Loading messages...</p>
                   ) : realtimeMessages.length > 0 ? (
                     realtimeMessages.map((msg) => {
                       const showHostAvatar = Boolean(
-                        hostIdentity &&
-                        msg.author === hostIdentity &&
-                        !isOwnMessage(msg.author),
+                        hostIdentity && msg.author === hostIdentity && !isOwnMessage(msg.author)
                       );
                       return (
                         <div
-                          key={msg.localId ?? msg.sid}
+                          key={msg.localId ?? msg.id}
                           className={`flex ${isOwnMessage(msg.author) ? "justify-end" : "justify-start"}`}
                         >
                           {!isOwnMessage(msg.author) && (
@@ -914,22 +733,21 @@ export default function ChatPanel({
                             <p className="text-[11px] font-semibold opacity-70">
                               {getAuthorLabel(msg.author)}
                             </p>
-                          {msg.mediaUrl && (
-                            <div className="mt-2 overflow-hidden rounded-xl">
-                              <img
-                                src={msg.mediaUrl}
-                                alt="Shared image"
-                                className="h-auto w-64 max-w-full rounded-xl object-cover"
-                                onError={() => refreshMediaUrl(msg)}
-                              />
-                            </div>
-                          )}
+                            {msg.mediaUrl && (
+                              <div className="mt-2 overflow-hidden rounded-xl">
+                                <img
+                                  src={msg.mediaUrl}
+                                  alt="Shared image"
+                                  className="h-auto w-64 max-w-full rounded-xl object-cover"
+                                  onError={() => refreshMediaUrl(msg)}
+                                />
+                              </div>
+                            )}
                             {msg.body && <p className="text-sm">{msg.body}</p>}
-                            {msg.dateCreated && (
+                            {msg.createdAt && (
                               <div className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-70">
-                                <span>{new Date(msg.dateCreated).toLocaleString()}</span>
-                                {isOwnMessage(msg.author) &&
-                                  renderDeliveryStatus(msg.deliveryStatus)}
+                                <span>{new Date(msg.createdAt).toLocaleString()}</span>
+                                {isOwnMessage(msg.author) && renderDeliveryStatus(msg.deliveryStatus)}
                               </div>
                             )}
                           </div>
@@ -965,7 +783,7 @@ export default function ChatPanel({
                     className="flex-1 rounded-full border-emerald-100 bg-white px-4 py-2 focus-visible:ring-emerald-200"
                     placeholder="Type a message..."
                     value={message}
-                    onChange={(event) => setMessage(event.target.value)}
+                    onChange={(e) => setMessage(e.target.value)}
                   />
                   <Button
                     type="primary"
@@ -979,9 +797,7 @@ export default function ChatPanel({
               </>
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-16 text-center text-sm text-slate-500">
-                <p className="text-base font-semibold text-slate-700">
-                  Select a conversation
-                </p>
+                <p className="text-base font-semibold text-slate-700">Select a conversation</p>
                 <p>Pick a chat on the left or open a booking.</p>
               </div>
             )}
@@ -993,74 +809,19 @@ export default function ChatPanel({
     </div>
   );
 }
+
 const renderDeliveryStatus = (status?: MessageRow["deliveryStatus"]) => {
-  if (!status) return null;
-  if (status === "sending") {
+  if (!status || status === "sending") {
     return (
       <span className="inline-flex h-3 w-3 items-center justify-center">
         <svg viewBox="0 0 16 16" className="h-3 w-3 text-current">
-          <circle
-            cx="8"
-            cy="8"
-            r="6.5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
+          <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
           <path
             d="M8 4.5v3.8l2.6 1.7"
             fill="none"
             stroke="currentColor"
             strokeWidth="1.5"
             strokeLinecap="round"
-          />
-        </svg>
-      </span>
-    );
-  }
-  if (status === "read") {
-    return (
-      <span className="inline-flex h-3 w-5 items-center justify-center text-sky-200">
-        <svg viewBox="0 0 20 16" className="h-3 w-5">
-          <path
-            d="M2 8.5l3 3.2 6-6.7"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M9 11l6-6.7"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </span>
-    );
-  }
-  if (status === "delivered") {
-    return (
-      <span className="inline-flex h-3 w-5 items-center justify-center text-white/80">
-        <svg viewBox="0 0 20 16" className="h-3 w-5">
-          <path
-            d="M2 8.5l3 3.2 6-6.7"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M9 11l6-6.7"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
           />
         </svg>
       </span>
