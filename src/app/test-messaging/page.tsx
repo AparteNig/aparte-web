@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import Button from "@/components/general/Button";
 import { Input } from "@/components/ui/input";
 import ChatPanel from "@/components/messaging/chat-panel";
+import { ConversationSocketProvider } from "@/contexts/ConversationSocketContext";
 import { loginUserRequest, verifyOtpRequest } from "@/lib/api-client";
 
 const USER_TOKEN_KEY = "aparte_test_booking_user_token";
@@ -130,7 +131,9 @@ export default function TestMessagingPage() {
         </p>
       </div>
 
-      <ChatPanel token={userToken} title="User messaging workspace" />
+      <ConversationSocketProvider token={userToken}>
+        <ChatPanel token={userToken} title="User messaging workspace" />
+      </ConversationSocketProvider>
 
       {loginOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">

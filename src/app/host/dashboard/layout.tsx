@@ -1,10 +1,11 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import type { NavItem } from "@/components/dashboard/sidebar-nav";
-import { HOST_AUTH_COOKIE } from "@/lib/auth";
+import { getAuthCookie, HOST_AUTH_COOKIE } from "@/lib/auth";
+import { ConversationSocketProvider } from "@/contexts/ConversationSocketContext";
 import { useHostProfileQuery } from "@/hooks/use-host-profile";
 import { ProfileSetupModal } from "@/components/host/profile-setup-modal";
 import { HostHeaderBar } from "@/components/host/host-header-bar";
@@ -28,6 +29,10 @@ export default function HostDashboardLayout({
 }) {
   const { data } = useHostProfileQuery();
   const pathname = usePathname();
+  const [socketToken, setSocketToken] = useState<string | null>(null);
+  useEffect(() => {
+    setSocketToken(getAuthCookie(HOST_AUTH_COOKIE));
+  }, []);
   const isOverview = pathname === "/host/dashboard";
   const needsProfileSetup = Boolean(
     data &&
@@ -42,18 +47,20 @@ export default function HostDashboardLayout({
   );
 
   return (
-    <ResponsiveGate>
-      <ProfileSetupModal open={needsProfileSetup} profile={data} />
-      <DashboardShell
-        navItems={navItems}
-        title={isOverview ? "Landlord Workspace" : undefined}
-        subtitle={isOverview ? "Track occupancy, revenue, and guest messages." : undefined}
-        logoutHref="/host/login"
-        cookieName={HOST_AUTH_COOKIE}
-        headerSlot={<HostHeaderBar profile={data} />}
-      >
-        {children}
-      </DashboardShell>
-    </ResponsiveGate>
+    <ConversationSocketProvider token={socketToken}>
+      <ResponsiveGate>
+        <ProfileSetupModal open={needsProfileSetup} profile={data} />
+        <DashboardShell
+          navItems={navItems}
+          title={isOverview ? "Landlord Workspace" : undefined}
+          subtitle={isOverview ? "Track occupancy, revenue, and guest messages." : undefined}
+          logoutHref="/host/login"
+          cookieName={HOST_AUTH_COOKIE}
+          headerSlot={<HostHeaderBar profile={data} />}
+        >
+          {children}
+        </DashboardShell>
+      </ResponsiveGate>
+    </ConversationSocketProvider>
   );
 }
