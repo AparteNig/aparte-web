@@ -68,7 +68,10 @@ export type HostListingDetail = HostListing & {
 
 export type HostBooking = {
   id: number;
-  listingId: number;
+  listingId: number | null;
+  vehicleId: number | null;
+  withDriver: boolean;
+  driverFee: number;
   hostId: number;
   guestName: string;
   guestEmail: string;
@@ -85,6 +88,14 @@ export type HostBooking = {
     title: string;
     city: string;
     country: string;
+  };
+  vehicle?: {
+    id: number | null;
+    make: string;
+    model: string;
+    year: number;
+    pickupCity: string;
+    pickupCountry: string;
   };
 };
 

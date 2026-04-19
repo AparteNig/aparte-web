@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,8 +10,15 @@ import { useHostBookingsQuery, useCompleteBookingMutation } from "@/hooks/use-bo
 import Button from "@/components/general/Button";
 import { useHostListingsQuery } from "@/hooks/use-host-listings";
 import { useListingCalendarQuery } from "@/hooks/use-listing-calendar";
+import { getHostVehicleBookings } from "@/lib/api-client";
+import {
+  useHostVehiclesQuery,
+  useHostVehicleQuery,
+  useAddVehicleCalendarBlockMutation,
+  useDeleteVehicleCalendarBlockMutation,
+} from "@/hooks/use-host-vehicles";
 import { cn } from "@/lib/utils";
-import type { ListingCalendarBlock } from "@/types/listing";
+import type { ListingCalendarBlock, HostBooking } from "@/types/listing";
 
 const formatDate = (date: Date) => date.toISOString().split("T")[0];
 const isDateBetween = (date: string, start: string, end: string) => {
@@ -18,8 +26,12 @@ const isDateBetween = (date: string, start: string, end: string) => {
   return target >= new Date(start).getTime() && target <= new Date(end).getTime();
 };
 
+type Tab = "properties" | "vehicles";
+
 export default function HostBookingsPage() {
   const router = useRouter();
+  const [tab, setTab] = useState<Tab>("properties");
+
   const bookingsQuery = useHostBookingsQuery();
   const completeBooking = useCompleteBookingMutation();
   const listingsQuery = useHostListingsQuery();
@@ -30,6 +42,65 @@ export default function HostBookingsPage() {
     activeAmount: 0,
     completedCount: 0,
     completedAmount: 0,
+  };
+
+  const vehicleBookingsQuery = useQuery({
+    queryKey: ["hostVehicleBookings"],
+    queryFn: async () => {
+      const data = await getHostVehicleBookings();
+      return data.bookings;
+    },
+  });
+  const vehicleBookings: HostBooking[] = vehicleBookingsQuery.data ?? [];
+
+  const hostVehiclesQuery = useHostVehiclesQuery();
+  const hostVehicles = hostVehiclesQuery.data ?? [];
+  const [selectedVehicleId, setSelectedVehicleId] = useState<number | undefined>(undefined);
+  const [vehicleMonth, setVehicleMonth] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [blockStart, setBlockStart] = useState("");
+  const [blockEnd, setBlockEnd] = useState("");
+  const [blockReason, setBlockReason] = useState("");
+  const [blockError, setBlockError] = useState<string | null>(null);
+
+  const { data: selectedVehicle } = useHostVehicleQuery(selectedVehicleId);
+  const addBlock = useAddVehicleCalendarBlockMutation(selectedVehicleId);
+  const deleteBlock = useDeleteVehicleCalendarBlockMutation(selectedVehicleId);
+
+  useEffect(() => {
+    if (!selectedVehicleId && hostVehicles.length > 0) {
+      setSelectedVehicleId(hostVehicles[0].id);
+    }
+  }, [hostVehicles, selectedVehicleId]);
+
+  const vehicleCalendarBlocks = selectedVehicle?.calendarBlocks ?? [];
+
+  const vehicleBookingsForSelected = useMemo(
+    () => vehicleBookings.filter((b) => b.vehicleId === selectedVehicleId),
+    [vehicleBookings, selectedVehicleId],
+  );
+
+  const vehicleDaysInMonth = useMemo(() => {
+    const [year, monthStr] = vehicleMonth.split("-");
+    const firstDay = new Date(Number(year), Number(monthStr) - 1, 1);
+    const startWeekday = firstDay.getDay();
+    const matrix: Array<{ date: string; currentMonth: boolean }> = [];
+    for (let i = 0; i < 42; i++) {
+      const date = new Date(firstDay);
+      date.setDate(i - startWeekday + 1);
+      matrix.push({ date: formatDate(date), currentMonth: date.getMonth() === firstDay.getMonth() });
+    }
+    return matrix;
+  }, [vehicleMonth]);
+
+  const handleAddBlock = async () => {
+    if (!blockStart || !blockEnd) { setBlockError("Both dates are required."); return; }
+    if (new Date(blockEnd) < new Date(blockStart)) { setBlockError("End date must be after start date."); return; }
+    setBlockError(null);
+    await addBlock.mutateAsync({ startDate: blockStart, endDate: blockEnd, reason: blockReason || undefined });
+    setBlockStart(""); setBlockEnd(""); setBlockReason("");
   };
 
   const [selectedListingId, setSelectedListingId] = useState<number | undefined>(undefined);
@@ -86,7 +157,7 @@ export default function HostBookingsPage() {
             <select
               className="mt-2 w-full rounded-2xl border border-slate-200 p-3 text-sm"
               value={selectedListingId ?? ""}
-              onChange={(event) => setSelectedListingId(Number(event.target.value))}
+              onChange={(e) => setSelectedListingId(Number(e.target.value))}
             >
               {listings.map((listing) => (
                 <option key={listing.id} value={listing.id}>
@@ -111,160 +182,361 @@ export default function HostBookingsPage() {
             <label className="text-xs font-semibold uppercase text-slate-500">Upcoming bookings</label>
             <p className="mt-2 text-3xl font-semibold text-slate-900">
               {bookings.filter(
-                (booking) =>
-                  new Date(booking.startDate) >= new Date() &&
-                  booking.status !== "completed",
+                (b) => new Date(b.startDate) >= new Date() && b.status !== "completed",
               ).length}
             </p>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <Card className="border-slate-200 md:col-span-2">
-          <CardHeader>
-            <CardTitle>Bookings</CardTitle>
-            <p className="text-sm text-slate-500">
-              Recent reservations across your listings. Filter using the dropdown above.
-            </p>
-          </CardHeader>
-          <CardContent className="overflow-auto">
-            {bookingsQuery.isLoading ? (
-              <p className="text-sm text-slate-500">Loading bookings...</p>
-            ) : bookingsForListing.length === 0 ? (
-              <p className="text-sm text-slate-500">No bookings yet.</p>
-            ) : (
-              <table className="w-full text-left text-sm text-slate-600">
-                <thead>
-                  <tr className="text-xs uppercase text-slate-500">
-                    <th className="pb-2">Listing</th>
-                    <th className="pb-2">Guest</th>
-                    <th className="pb-2">Dates</th>
-                    <th className="pb-2">Nights</th>
-                    <th className="pb-2">Status</th>
-                    <th className="pb-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {bookingsForListing.map((booking) => {
-                    const amount = Number(booking.totalAmount ?? 0);
-                    return (
-                      <tr key={booking.id}>
-                      <td className="py-3">
-                        <div className="font-semibold text-slate-900">
-                          {booking.listing?.title ?? `Listing #${booking.listingId}`}
-                        </div>
-                        <p className="text-xs text-slate-500">
-                          {booking.listing?.city}, {booking.listing?.country}
-                        </p>
-                      </td>
-                      <td className="py-3">
-                        <div className="font-semibold text-slate-900">{booking.guestName}</div>
-                        <p className="text-xs text-slate-500">{booking.guestEmail || booking.guestPhone}</p>
-                      </td>
-                      <td className="py-3">
-                        {new Date(booking.startDate).toLocaleDateString()} –{" "}
-                        {new Date(booking.endDate).toLocaleDateString()}
-                      </td>
-                      <td className="py-3">{booking.nights}</td>
-                      <td className="py-3">
-                        <span
+      {/* Tab strip */}
+      <div className="flex gap-2">
+        {(["properties", "vehicles"] as Tab[]).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={cn(
+              "rounded-full px-5 py-1.5 text-xs font-semibold transition",
+              tab === t ? "bg-primary text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+            )}
+          >
+            {t === "properties"
+              ? `Property Bookings (${bookings.length})`
+              : `Car Rentals (${vehicleBookings.length})`}
+          </button>
+        ))}
+      </div>
+
+      {tab === "properties" ? (
+        <section className="grid gap-4 md:grid-cols-3">
+          <Card className="border-slate-200 md:col-span-2">
+            <CardHeader>
+              <CardTitle>Bookings</CardTitle>
+              <p className="text-sm text-slate-500">
+                Recent reservations across your listings. Filter using the dropdown above.
+              </p>
+            </CardHeader>
+            <CardContent className="overflow-auto">
+              {bookingsQuery.isLoading ? (
+                <p className="text-sm text-slate-500">Loading bookings...</p>
+              ) : bookingsForListing.length === 0 ? (
+                <p className="text-sm text-slate-500">No bookings yet.</p>
+              ) : (
+                <table className="w-full text-left text-sm text-slate-600">
+                  <thead>
+                    <tr className="text-xs uppercase text-slate-500">
+                      <th className="pb-2">Listing</th>
+                      <th className="pb-2">Guest</th>
+                      <th className="pb-2">Dates</th>
+                      <th className="pb-2">Nights</th>
+                      <th className="pb-2">Status</th>
+                      <th className="pb-2 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {bookingsForListing.map((booking) => {
+                      const amount = Number(booking.totalAmount ?? 0);
+                      return (
+                        <tr key={booking.id}>
+                          <td className="py-3">
+                            <div className="font-semibold text-slate-900">
+                              {booking.listing?.title ?? `Listing #${booking.listingId}`}
+                            </div>
+                            <p className="text-xs text-slate-500">
+                              {booking.listing?.city}, {booking.listing?.country}
+                            </p>
+                          </td>
+                          <td className="py-3">
+                            <div className="font-semibold text-slate-900">{booking.guestName}</div>
+                            <p className="text-xs text-slate-500">{booking.guestEmail || booking.guestPhone}</p>
+                          </td>
+                          <td className="py-3">
+                            {new Date(booking.startDate).toLocaleDateString()} –{" "}
+                            {new Date(booking.endDate).toLocaleDateString()}
+                          </td>
+                          <td className="py-3">{booking.nights}</td>
+                          <td className="py-3">
+                            <span
+                              className={cn(
+                                "rounded-full px-3 py-1 text-xs font-semibold",
+                                booking.status === "confirmed"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : booking.status === "pending"
+                                  ? "bg-amber-100 text-amber-700"
+                                  : "bg-slate-100 text-slate-600",
+                              )}
+                            >
+                              {booking.status}
+                            </span>
+                            <p className="text-xs text-slate-500">₦{amount.toLocaleString()}</p>
+                          </td>
+                          <td className="py-3 text-right">
+                            <div className="flex flex-col items-end gap-2">
+                              <Button
+                                type="secondary"
+                                className="rounded-2xl px-4 py-1 text-xs"
+                                onClick={() =>
+                                  router.push(`/host/dashboard/messages?bookingId=${booking.id}`)
+                                }
+                              >
+                                Open chat
+                              </Button>
+                              {booking.status === "confirmed" && (
+                                <button
+                                  type="button"
+                                  className="text-sm font-semibold text-primary hover:underline disabled:opacity-50"
+                                  disabled={completeBooking.isPending}
+                                  onClick={() => completeBooking.mutate(booking.id)}
+                                >
+                                  Mark completed
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </CardContent>
+          </Card>
+          <Card className="border-slate-200">
+            <CardHeader>
+              <CardTitle>Calendar</CardTitle>
+              <p className="text-sm text-slate-500">Booked days include naming; other blocks are red.</p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <label className="block text-xs font-semibold uppercase text-slate-500">
+                Month
+                <Input
+                  type="month"
+                  className="mt-1"
+                  value={month}
+                  onChange={(e) => setMonth(e.target.value)}
+                />
+              </label>
+              {calendarLoading ? (
+                <p className="text-sm text-slate-500">Loading calendar…</p>
+              ) : (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase text-slate-500">
+                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                      <span key={day}>{day}</span>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-2 text-sm">
+                    {daysInMonth.map(({ date, currentMonth }) => {
+                      const block = blocks.find((b) => isDateBetween(date, b.startDate, b.endDate));
+                      const isBooked = block?.reason?.toLowerCase().startsWith("booked");
+                      return (
+                        <div
+                          key={date}
                           className={cn(
-                            "rounded-full px-3 py-1 text-xs font-semibold",
-                            booking.status === "confirmed"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : booking.status === "pending"
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-slate-100 text-slate-600",
+                            "flex h-16 flex-col items-center justify-center rounded-2xl border",
+                            currentMonth ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50 text-slate-400",
+                            block && "border-rose-200 bg-rose-100 text-rose-800",
+                            isBooked && "border-emerald-200 bg-emerald-100 text-emerald-800",
                           )}
                         >
-                          {booking.status}
-                        </span>
-                        <p className="text-xs text-slate-500">
-                          ₦{amount.toLocaleString()}
-                        </p>
-                      </td>
-                      <td className="py-3 text-right">
-                        <div className="flex flex-col items-end gap-2">
-                          <Button
-                            type="secondary"
-                            className="rounded-2xl px-4 py-1 text-xs"
-                            onClick={() =>
-                              router.push(`/host/dashboard/messages?bookingId=${booking.id}`)
-                            }
-                          >
-                            Open chat
-                          </Button>
-                          {booking.status === "confirmed" && (
-                            <button
-                              type="button"
-                              className="text-sm font-semibold text-primary hover:underline disabled:opacity-50"
-                              disabled={completeBooking.isPending}
-                              onClick={() => completeBooking.mutate(booking.id)}
-                            >
-                              Mark completed
-                            </button>
-                          )}
+                          <span>{new Date(date).getDate()}</span>
+                          {isBooked && <span className="text-[10px]">Booked</span>}
+                          {!isBooked && block && <span className="text-[10px]">Blocked</span>}
                         </div>
-                      </td>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+      ) : (
+        <section className="grid gap-4 md:grid-cols-3">
+          <Card className="border-slate-200 md:col-span-2">
+            <CardHeader>
+              <CardTitle>Car Rentals</CardTitle>
+              <p className="text-sm text-slate-500">Vehicle rental bookings. Select a vehicle to filter and manage its calendar.</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {hostVehicles.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold uppercase text-slate-500">Filter by vehicle</label>
+                  <select
+                    className="mt-2 w-full rounded-2xl border border-slate-200 p-3 text-sm"
+                    value={selectedVehicleId ?? ""}
+                    onChange={(e) => setSelectedVehicleId(Number(e.target.value))}
+                  >
+                    {hostVehicles.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.year} {v.make} {v.model}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {vehicleBookingsQuery.isLoading ? (
+                <p className="text-sm text-slate-500">Loading rentals...</p>
+              ) : vehicleBookingsForSelected.length === 0 ? (
+                <p className="text-sm text-slate-500">No rentals for this vehicle yet.</p>
+              ) : (
+                <div className="overflow-auto">
+                  <table className="w-full text-left text-sm text-slate-600">
+                    <thead>
+                      <tr className="text-xs uppercase text-slate-500">
+                        <th className="pb-2">Renter</th>
+                        <th className="pb-2">Dates</th>
+                        <th className="pb-2">Days</th>
+                        <th className="pb-2">Status</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </CardContent>
-        </Card>
-        <Card className="border-slate-200">
-          <CardHeader>
-            <CardTitle>Calendar</CardTitle>
-            <p className="text-sm text-slate-500">Booked days include naming; other blocks are red.</p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <label className="block text-xs font-semibold uppercase text-slate-500">
-              Month
-              <Input
-                type="month"
-                className="mt-1"
-                value={month}
-                onChange={(event) => setMonth(event.target.value)}
-              />
-            </label>
-            {calendarLoading ? (
-              <p className="text-sm text-slate-500">Loading calendar…</p>
-            ) : (
-              <div className="space-y-2">
-                <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase text-slate-500">
-                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                    <span key={day}>{day}</span>
-                  ))}
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {vehicleBookingsForSelected.map((booking) => {
+                        const amount = Number(booking.totalAmount ?? 0);
+                        return (
+                          <tr key={booking.id}>
+                            <td className="py-3">
+                              <div className="font-semibold text-slate-900">{booking.guestName}</div>
+                              <p className="text-xs text-slate-500">
+                                {booking.guestEmail || booking.guestPhone || "—"}
+                                {booking.withDriver && " · With driver"}
+                              </p>
+                            </td>
+                            <td className="py-3 text-xs">
+                              {new Date(booking.startDate).toLocaleDateString()} –{" "}
+                              {new Date(booking.endDate).toLocaleDateString()}
+                            </td>
+                            <td className="py-3">{booking.nights}</td>
+                            <td className="py-3">
+                              <span
+                                className={cn(
+                                  "rounded-full px-3 py-1 text-xs font-semibold",
+                                  booking.status === "confirmed" || booking.status === "ongoing"
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : booking.status === "completed"
+                                    ? "bg-slate-100 text-slate-600"
+                                    : "bg-amber-100 text-amber-700",
+                                )}
+                              >
+                                {booking.status.replace("_", " ")}
+                              </span>
+                              <p className="mt-0.5 text-xs text-slate-500">₦{amount.toLocaleString()}</p>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-                <div className="grid grid-cols-7 gap-2 text-sm">
-                  {daysInMonth.map(({ date, currentMonth }) => {
-                    const block = blocks.find((block) => isDateBetween(date, block.startDate, block.endDate));
-                    const isBooked = block?.reason?.toLowerCase().startsWith("booked");
-                    return (
-                      <div
-                        key={date}
-                        className={cn(
-                          "flex h-16 flex-col items-center justify-center rounded-2xl border",
-                          currentMonth ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50 text-slate-400",
-                          block && "border-rose-200 bg-rose-100 text-rose-800",
-                          isBooked && "border-emerald-200 bg-emerald-100 text-emerald-800",
-                        )}
-                      >
-                        <span>{new Date(date).getDate()}</span>
-                        {isBooked && <span className="text-[10px]">Booked</span>}
-                        {!isBooked && block && <span className="text-[10px]">Blocked</span>}
-                      </div>
-                    );
-                  })}
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="space-y-4">
+            <Card className="border-slate-200">
+              <CardHeader>
+                <CardTitle>Calendar</CardTitle>
+                <p className="text-sm text-slate-500">Green = rented · Red = blocked</p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <label className="block text-xs font-semibold uppercase text-slate-500">
+                  Month
+                  <Input
+                    type="month"
+                    className="mt-1"
+                    value={vehicleMonth}
+                    onChange={(e) => setVehicleMonth(e.target.value)}
+                  />
+                </label>
+                <div className="space-y-2">
+                  <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase text-slate-500">
+                    {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
+                      <span key={d}>{d}</span>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-1 text-sm">
+                    {vehicleDaysInMonth.map(({ date, currentMonth }) => {
+                      const block = vehicleCalendarBlocks.find((b) =>
+                        isDateBetween(date, b.startDate, b.endDate),
+                      );
+                      const isRented = block?.reason?.toLowerCase().startsWith("rented");
+                      return (
+                        <div
+                          key={date}
+                          className={cn(
+                            "flex h-10 flex-col items-center justify-center rounded-xl border text-xs",
+                            currentMonth ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50 text-slate-400",
+                            block && "border-rose-200 bg-rose-100 text-rose-800",
+                            isRented && "border-emerald-200 bg-emerald-100 text-emerald-800",
+                          )}
+                        >
+                          <span>{new Date(date).getDate()}</span>
+                          {isRented && <span className="text-[8px] leading-none">Rented</span>}
+                          {!isRented && block && <span className="text-[8px] leading-none">Blocked</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200">
+              <CardHeader><CardTitle className="text-base">Block dates</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                {blockError && <p className="text-xs text-rose-600">{blockError}</p>}
+                <label className="block space-y-1 text-xs font-semibold text-slate-600">
+                  Start date
+                  <Input type="date" value={blockStart} onChange={(e) => setBlockStart(e.target.value)} />
+                </label>
+                <label className="block space-y-1 text-xs font-semibold text-slate-600">
+                  End date
+                  <Input type="date" value={blockEnd} onChange={(e) => setBlockEnd(e.target.value)} />
+                </label>
+                <label className="block space-y-1 text-xs font-semibold text-slate-600">
+                  Reason (optional)
+                  <Input placeholder="Maintenance, personal use…" value={blockReason} onChange={(e) => setBlockReason(e.target.value)} />
+                </label>
+                <Button
+                  type="primary"
+                  className="w-full rounded-2xl text-sm"
+                  disabled={addBlock.isPending || !selectedVehicleId}
+                  onClick={handleAddBlock}
+                >
+                  {addBlock.isPending ? "Blocking…" : "Block dates"}
+                </Button>
+
+                {vehicleCalendarBlocks.filter((b) => !b.reason?.toLowerCase().startsWith("rented")).length > 0 && (
+                  <div className="mt-2 space-y-2 border-t border-slate-100 pt-3">
+                    <p className="text-xs font-semibold text-slate-500">Manual blocks</p>
+                    {vehicleCalendarBlocks
+                      .filter((b) => !b.reason?.toLowerCase().startsWith("rented"))
+                      .map((b) => (
+                        <div key={b.id} className="flex items-start justify-between gap-2 text-xs text-slate-600">
+                          <div>
+                            <p className="font-medium">
+                              {new Date(b.startDate).toLocaleDateString()} – {new Date(b.endDate).toLocaleDateString()}
+                            </p>
+                            {b.reason && <p className="text-slate-500">{b.reason}</p>}
+                          </div>
+                          <button
+                            type="button"
+                            className="shrink-0 text-rose-500 hover:text-rose-700 disabled:opacity-50"
+                            disabled={deleteBlock.isPending}
+                            onClick={() => deleteBlock.mutate(b.id)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

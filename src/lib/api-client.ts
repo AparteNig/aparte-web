@@ -486,6 +486,45 @@ export const completeCustomerBooking = (bookingId: number) =>
     auth: false,
   });
 
+// ── Customer Vehicle Booking API ───────────────────────────────
+
+export type CreateCustomerVehicleBookingPayload = {
+  vehicleId: number;
+  guestName: string;
+  guestEmail?: string;
+  guestPhone?: string;
+  startDate: string;
+  endDate: string;
+  days?: number;
+  withDriver?: boolean;
+  notes?: string;
+};
+
+export const getPublicVehicles = () =>
+  apiFetch<{ vehicles: import("@/types/vehicle").HostVehicle[] }>("/customer/vehicle-bookings/vehicles", {
+    method: "GET",
+    auth: false,
+  });
+
+export const createCustomerVehicleBookingWithToken = (
+  payload: CreateCustomerVehicleBookingPayload,
+  token: string,
+) =>
+  apiFetch<{ booking: HostBooking }>("/customer/vehicle-bookings", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    auth: false,
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+export const getHostVehicleBookings = () =>
+  apiFetch<{ bookings: HostBooking[] }>("/customer/vehicle-bookings/host", {
+    method: "GET",
+    authCookie: "host",
+  });
+
 // ── Host Vehicle API ──────────────────────────────────────────
 
 export const getHostVehicles = (status?: string) =>

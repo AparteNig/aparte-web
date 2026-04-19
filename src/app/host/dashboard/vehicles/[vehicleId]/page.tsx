@@ -101,10 +101,20 @@ export default function VehicleDetailPage() {
 
       {vehicle.photos.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {vehicle.photos.map((p) => (
-            <img key={p.id} src={p.url} alt={p.caption || 'Vehicle photo'}
-              className="h-24 w-32 rounded-xl object-cover" />
-          ))}
+          {vehicle.photos.map((p) => {
+            const isVid = /\.(mp4|mov|webm|avi|mkv)(\?|$)/i.test(p.url);
+            return isVid ? (
+              <div key={p.id} className="relative h-24 w-32 overflow-hidden rounded-xl bg-slate-900">
+                <video src={p.url} className="h-full w-full object-cover opacity-70" muted />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="rounded-full bg-white/80 p-1.5 text-sm leading-none">▶</span>
+                </div>
+              </div>
+            ) : (
+              <img key={p.id} src={p.url} alt={p.caption || 'Vehicle photo'}
+                className="h-24 w-32 rounded-xl object-cover" />
+            );
+          })}
         </div>
       )}
     </div>

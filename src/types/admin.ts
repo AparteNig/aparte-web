@@ -66,7 +66,10 @@ export type AdminListingDetail = {
 export type AdminBookingRow = {
   booking: {
     id: number;
-    listingId: number;
+    listingId: number | null;
+    vehicleId: number | null;
+    withDriver: boolean;
+    driverFee: number;
     hostId: number;
     guestName: string;
     guestEmail: string | null;
@@ -82,6 +85,12 @@ export type AdminBookingRow = {
   listing: {
     id: number;
     title: string | null;
+  } | null;
+  vehicle: {
+    id: number;
+    make: string;
+    model: string;
+    year: number;
   } | null;
   host: {
     id: number;
