@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import type { NavItem } from "@/components/dashboard/sidebar-nav";
 import { ADMIN_AUTH_COOKIE } from "@/lib/auth";
+import { AdminSocketWrapper } from "@/components/layout/AdminSocketWrapper";
 
 const navItems: NavItem[] = [
   { label: "Overview", href: "/admin/dashboard", icon: "dashboard" },
@@ -19,14 +20,16 @@ const navItems: NavItem[] = [
 
 export default function AdminPanelLayout({ children }: { children: ReactNode }) {
   return (
-    <DashboardShell
-      navItems={navItems}
-      title="Aparte Admin"
-      subtitle="Approve listings, monitor bookings, and keep payouts compliant."
-      logoutHref="/admin/login"
-      cookieName={ADMIN_AUTH_COOKIE}
-    >
-      {children}
-    </DashboardShell>
+    <AdminSocketWrapper>
+      <DashboardShell
+        navItems={navItems}
+        title="Aparte Admin"
+        subtitle="Approve listings, monitor bookings, and keep payouts compliant."
+        logoutHref="/admin/login"
+        cookieName={ADMIN_AUTH_COOKIE}
+      >
+        {children}
+      </DashboardShell>
+    </AdminSocketWrapper>
   );
 }
