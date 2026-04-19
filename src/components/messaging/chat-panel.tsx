@@ -98,10 +98,16 @@ type ApiMessage = {
   createdAt: string;
 };
 
-const apiMessageToRow = async (
-  m: ApiMessage,
-  token: string | null
-): Promise<MessageRow> => {
+type MessageLike = {
+  id: number;
+  senderType: string;
+  senderId: number;
+  body: string | null;
+  mediaKey?: string | null;
+  createdAt: string;
+};
+
+const messageToRow = async (m: MessageLike, token: string | null): Promise<MessageRow> => {
   const author = `${m.senderType}_${m.senderId}`;
   let mediaUrl: string | undefined;
   if (m.mediaKey && token) {
@@ -115,25 +121,6 @@ const apiMessageToRow = async (
     } catch { /* ignore — will refresh on image error */ }
   }
   return { id: m.id, author, body: m.body, createdAt: m.createdAt, mediaUrl, mediaKey: m.mediaKey ?? undefined, deliveryStatus: "sent" };
-};
-
-const socketMessageToRow = async (
-  msg: MessageNew,
-  token: string | null
-): Promise<MessageRow> => {
-  const author = `${msg.senderType}_${msg.senderId}`;
-  let mediaUrl: string | undefined;
-  if (msg.mediaKey && token) {
-    try {
-      const signed = await fetchWithAuth<{ url: string }>(
-        `/uploads/signed-url?key=${encodeURIComponent(msg.mediaKey)}`,
-        token,
-        { method: "GET" }
-      );
-      mediaUrl = signed.url;
-    } catch { /* ignore */ }
-  }
-  return { id: msg.id, author, body: msg.body, createdAt: msg.createdAt, mediaUrl, mediaKey: msg.mediaKey, deliveryStatus: "sent" };
 };
 
 export default function ChatPanel({
@@ -156,6 +143,7 @@ export default function ChatPanel({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const mediaInputRef = useRef<HTMLInputElement | null>(null);
+  const conversationIdRef = useRef<number | null>(null);
 
   const identity = token ? getIdentityFromToken(token) : null;
   const { socket, sendMessage: socketSend, markRead, joinRoom } = useConversationSocketContext();
@@ -188,7 +176,7 @@ export default function ChatPanel({
     )
       .then(async (data) => {
         if (cancelled) return;
-        const rows = await Promise.all(data.messages.map((m) => apiMessageToRow(m, token)));
+        const rows = await Promise.all(data.messages.map((m) => messageToRow(m, token)));
         if (!cancelled) {
           setRealtimeMessages(rows);
           setHasMore(data.hasMore);
@@ -206,7 +194,7 @@ export default function ChatPanel({
     if (!socket || conversationId === null) return;
     const handler = async (msg: MessageNew) => {
       if (msg.conversationId !== conversationId) return;
-      const row = await socketMessageToRow(msg, token);
+      const row = await messageToRow(msg, token);
       setRealtimeMessages((prev) => {
         if (prev.some((item) => item.id === msg.id && item.id !== 0)) return prev;
         const optimistic = prev.find(
@@ -233,38 +221,15 @@ export default function ChatPanel({
     if (conversationId !== null) markRead(conversationId);
   }, [conversationId, markRead]);
 
+  // Keep conversationIdRef in sync for async cancellation guards
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
+
   // Scroll to bottom on new message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [realtimeMessages.length, conversationId]);
-
-  // Auto-open from URL param
-  useEffect(() => {
-    if (!initialBookingId || !token) return;
-    openByBookingMutation.mutate(String(initialBookingId));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialBookingId, token]);
-
-  const loadOlderMessages = async () => {
-    if (!token || conversationId === null || !hasMore || loadingOlder) return;
-    const oldest = realtimeMessages[0];
-    if (!oldest) return;
-    setLoadingOlder(true);
-    try {
-      const data = await fetchWithAuth<{ messages: ApiMessage[]; hasMore: boolean }>(
-        `/conversations/${conversationId}/messages?before=${oldest.id}&limit=50`,
-        token,
-        { method: "GET" }
-      );
-      const rows = await Promise.all(data.messages.map((m) => apiMessageToRow(m, token)));
-      setRealtimeMessages((prev) => [...rows, ...prev]);
-      setHasMore(data.hasMore);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load older messages.");
-    } finally {
-      setLoadingOlder(false);
-    }
-  };
 
   const openByBookingMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -282,6 +247,38 @@ export default function ChatPanel({
       setError(err instanceof Error ? err.message : "Failed to open conversation.");
     }
   });
+
+  // Auto-open from URL param — must be after openByBookingMutation declaration
+  useEffect(() => {
+    if (!initialBookingId || !token) return;
+    openByBookingMutation.mutate(String(initialBookingId));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialBookingId, token]);
+
+  const loadOlderMessages = async () => {
+    if (!token || conversationId === null || !hasMore || loadingOlder) return;
+    const oldest = realtimeMessages[0];
+    if (!oldest) return;
+    const loadingForId = conversationId;
+    setLoadingOlder(true);
+    try {
+      const data = await fetchWithAuth<{ messages: ApiMessage[]; hasMore: boolean }>(
+        `/conversations/${loadingForId}/messages?before=${oldest.id}&limit=50`,
+        token,
+        { method: "GET" }
+      );
+      // Guard: conversation changed while loading
+      if (conversationIdRef.current !== loadingForId) return;
+      const rows = await Promise.all(data.messages.map((m) => messageToRow(m, token)));
+      if (conversationIdRef.current !== loadingForId) return;
+      setRealtimeMessages((prev) => [...rows, ...prev]);
+      setHasMore(data.hasMore);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load older messages.");
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
 
   const openAdminMutation = useMutation({
     mutationFn: async (payload: { hostId?: number; userId?: number }) => {
@@ -306,10 +303,11 @@ export default function ChatPanel({
   const joinConversationMutation = useMutation({
     mutationFn: async (id: number) => {
       if (!token) throw new Error("Missing auth token");
-      return fetchWithAuth<{ status: string }>(`/conversations/${id}/join`, token, { method: "POST" });
+      await fetchWithAuth<{ status: string }>(`/conversations/${id}/join`, token, { method: "POST" });
+      return id;
     },
-    onSuccess: () => {
-      if (conversationId !== null) joinRoom(conversationId);
+    onSuccess: (id) => {
+      joinRoom(id);
       conversationsQuery.refetch();
     },
     onError: (err: unknown) => {
@@ -406,7 +404,10 @@ export default function ChatPanel({
         { method: "GET" }
       );
       setRealtimeMessages((prev) =>
-        prev.map((item) => (item.id === msg.id ? { ...item, mediaUrl: signed.url } : item))
+        prev.map((item) => {
+          const matches = msg.id !== 0 ? item.id === msg.id : item.localId === msg.localId;
+          return matches ? { ...item, mediaUrl: signed.url } : item;
+        })
       );
     } catch { /* ignore */ }
   };
