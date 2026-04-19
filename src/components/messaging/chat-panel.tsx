@@ -88,6 +88,17 @@ const fetchWithAuth = async <T,>(
   return payload as T;
 };
 
+type BookingOption = {
+  id: number;
+  status: string;
+  guestName: string | null;
+  startDate: string;
+  endDate: string;
+  listing: { title: string; city: string; country: string };
+};
+
+const MESSAGEABLE_STATUSES = new Set(["confirmed", "ongoing", "checkout_due", "guest_departed"]);
+
 type ApiMessage = {
   id: number;
   conversationId: number;
@@ -146,6 +157,7 @@ export default function ChatPanel({
   const conversationIdRef = useRef<number | null>(null);
 
   const identity = token ? getIdentityFromToken(token) : null;
+  const entityType = (identity?.split("_")[0] ?? null) as "user" | "host" | "admin" | null;
   const { socket, sendMessage: socketSend, markRead, joinRoom } = useConversationSocketContext();
 
   const conversationsQuery = useQuery<ConversationSummary[]>({
@@ -161,6 +173,18 @@ export default function ChatPanel({
     },
     enabled: Boolean(token),
     staleTime: 1000 * 30
+  });
+
+  const bookingsQuery = useQuery<BookingOption[]>({
+    queryKey: ["bookings-for-chat", token, entityType],
+    queryFn: async () => {
+      if (!token || entityType === "admin" || !entityType) return [];
+      const endpoint = entityType === "host" ? "/hosts/bookings" : "/customer/bookings";
+      const data = await fetchWithAuth<{ bookings: BookingOption[] }>(endpoint, token, { method: "GET" });
+      return data.bookings.filter((b) => MESSAGEABLE_STATUSES.has(b.status));
+    },
+    enabled: Boolean(token) && entityType !== "admin",
+    staleTime: 1000 * 60
   });
 
   // Load initial messages when conversation opens
@@ -578,25 +602,51 @@ export default function ChatPanel({
                 <p className="text-sm text-slate-500">No conversations yet.</p>
               )}
 
-              <form className="grid gap-3" onSubmit={handleOpenBooking}>
-                <label className="text-sm font-medium text-slate-600">
-                  Booking ID (open or create)
-                  <Input
-                    className="mt-1 rounded-2xl border-emerald-100 focus-visible:ring-emerald-200"
-                    placeholder="e.g. 5"
-                    value={bookingId}
-                    onChange={(e) => setBookingId(e.target.value)}
-                  />
-                </label>
-                <Button
-                  type="primary"
-                  className="rounded-2xl bg-emerald-600 px-5 text-white hover:bg-emerald-700"
-                  buttonType="submit"
-                  disabled={openByBookingMutation.isPending}
-                >
-                  {openByBookingMutation.isPending ? "Opening..." : "Open booking chat"}
-                </Button>
-              </form>
+              {entityType !== "admin" && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                    {entityType === "host" ? "Your bookings" : "My bookings"}
+                  </p>
+                  {bookingsQuery.isLoading ? (
+                    <p className="text-xs text-slate-400">Loading bookings…</p>
+                  ) : bookingsQuery.data && bookingsQuery.data.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {bookingsQuery.data.map((booking) => {
+                        const dateRange = `${new Date(booking.startDate).toLocaleDateString()} – ${new Date(booking.endDate).toLocaleDateString()}`;
+                        const label = booking.listing.title;
+                        const sub = booking.guestName
+                          ? `Guest: ${booking.guestName}`
+                          : `${booking.listing.city}`;
+                        const isPending = openByBookingMutation.isPending && bookingId === String(booking.id);
+                        return (
+                          <button
+                            key={booking.id}
+                            type="button"
+                            disabled={openByBookingMutation.isPending}
+                            onClick={() => {
+                              setBookingId(String(booking.id));
+                              openByBookingMutation.mutate(String(booking.id));
+                            }}
+                            className="w-full rounded-2xl border border-emerald-100 bg-white p-3 text-left text-sm transition hover:border-emerald-300 hover:shadow-sm disabled:opacity-60"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="font-medium text-slate-800 truncate">{label}</p>
+                              <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
+                                {booking.status.replace("_", " ")}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500">{sub}</p>
+                            <p className="text-[11px] text-slate-400">{dateRange}</p>
+                            {isPending && <p className="text-[11px] text-emerald-600">Opening…</p>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400">No active bookings.</p>
+                  )}
+                </div>
+              )}
 
               {allowAdminDirect && (
                 <form
