@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { QueryProvider } from "@/components/providers/query-provider";
 import CustomToast from "@/components/general/ui/CustomToast";
+import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://aparte.com"),
@@ -45,6 +46,7 @@ export default function RootLayout({
           {children}
           <CustomToast />
         </QueryProvider>
+        <Toaster richColors position="top-right" />
       </body>
     </html>
   );

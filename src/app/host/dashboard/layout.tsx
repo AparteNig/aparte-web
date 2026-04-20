@@ -10,6 +10,12 @@ import { useHostProfileQuery } from "@/hooks/use-host-profile";
 import { ProfileSetupModal } from "@/components/host/profile-setup-modal";
 import { HostHeaderBar } from "@/components/host/host-header-bar";
 import { ResponsiveGate } from "@/components/layout/responsive-gate";
+import { useDashboardEvents } from "@/hooks/use-dashboard-events";
+
+const HostDashboardEventsBridge = () => {
+  useDashboardEvents('host');
+  return null;
+};
 
 const navItems: NavItem[] = [
   { label: "Overview", href: "/host/dashboard", icon: "dashboard" },
@@ -48,6 +54,7 @@ export default function HostDashboardLayout({
 
   return (
     <ConversationSocketProvider token={socketToken}>
+      <HostDashboardEventsBridge />
       <ResponsiveGate>
         <ProfileSetupModal open={needsProfileSetup} profile={data} />
         <DashboardShell
