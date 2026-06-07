@@ -30,6 +30,29 @@ const isFormData = (body: BodyInit | null | undefined): body is FormData =>
 const buildUrl = (path: string) =>
   path.startsWith("http") ? path : `${API_BASE_URL.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const fetchWithRetry = async (
+  url: string,
+  options: RequestInit,
+  retries = 3
+): Promise<Response> => {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      if (res.status >= 500 && attempt < retries) {
+        await sleep(Math.pow(2, attempt) * 1000); // 1s, 2s, 4s
+        continue;
+      }
+      return res;
+    } catch (error) {
+      if (attempt === retries) throw error;
+      await sleep(Math.pow(2, attempt) * 1000);
+    }
+  }
+  throw new Error('fetch failed after retries');
+};
+
 export const apiFetch = async <T>(path: string, options: ApiFetchOptions = {}): Promise<T> => {
   const { auth = true, authCookie = "host", headers, ...rest } = options;
   const finalHeaders = new Headers(headers);
@@ -46,7 +69,7 @@ export const apiFetch = async <T>(path: string, options: ApiFetchOptions = {}): 
     }
   }
 
-  const response = await fetch(buildUrl(path), {
+  const response = await fetchWithRetry(buildUrl(path), {
     ...rest,
     headers: finalHeaders,
   });
@@ -338,6 +361,7 @@ export const updateHostListing = (
     Pick<
       HostListing,
       | "title"
+      | "category"
       | "summary"
       | "description"
       | "addressLine1"
