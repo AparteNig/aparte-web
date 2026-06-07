@@ -2,6 +2,24 @@ import type { HostOnboardingStatus } from "./host";
 
 export type ListingStatus = "draft" | "pending_review" | "published" | "suspended";
 
+export type ListingCategory =
+  | "apartment" | "studio" | "loft" | "duplex" | "penthouse"
+  | "villa" | "cottage" | "bungalow" | "townhouse" | "beach_house" | "mansion";
+
+export const LISTING_CATEGORIES: { value: ListingCategory; label: string }[] = [
+  { value: "apartment", label: "Apartment" },
+  { value: "studio", label: "Studio" },
+  { value: "loft", label: "Loft" },
+  { value: "duplex", label: "Duplex" },
+  { value: "penthouse", label: "Penthouse" },
+  { value: "villa", label: "Villa" },
+  { value: "cottage", label: "Cottage" },
+  { value: "bungalow", label: "Bungalow" },
+  { value: "townhouse", label: "Townhouse" },
+  { value: "beach_house", label: "Beach House" },
+  { value: "mansion", label: "Mansion" },
+];
+
 export type ListingPhoto = {
   id: number;
   key: string;
@@ -29,6 +47,7 @@ export type HostListing = {
   id: number;
   hostId: number;
   title: string;
+  category: ListingCategory | null;
   description: string;
   summary: string;
   addressLine1: string;

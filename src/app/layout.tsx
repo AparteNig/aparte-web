@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { PostHogProvider } from "@/components/providers/posthog-provider";
 import CustomToast from "@/components/general/ui/CustomToast";
 import { Toaster } from "sonner";
 
@@ -42,10 +43,12 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased" suppressHydrationWarning>
-        <QueryProvider>
-          {children}
-          <CustomToast />
-        </QueryProvider>
+        <PostHogProvider>
+          <QueryProvider>
+            {children}
+            <CustomToast />
+          </QueryProvider>
+        </PostHogProvider>
         <Toaster richColors position="top-right" />
       </body>
     </html>

@@ -22,9 +22,12 @@ import {
 import { useHostProfileQuery } from "@/hooks/use-host-profile";
 import { cn } from "@/lib/utils";
 import { uploadListingAsset } from "@/lib/api-client";
+import type { ListingCategory } from "@/types/listing";
+import { LISTING_CATEGORIES } from "@/types/listing";
 
 type ListingEditFormValues = {
   title: string;
+  category: ListingCategory | "";
   summary: string;
   description: string;
   addressLine1: string;
@@ -50,6 +53,7 @@ type ListingEditFormValues = {
 
 const emptyListingForm: ListingEditFormValues = {
   title: "",
+  category: "",
   summary: "",
   description: "",
   addressLine1: "",
@@ -204,6 +208,7 @@ export default function HostListingDetailPage() {
     if (listing) {
       reset({
         title: listing.title,
+        category: listing.category ?? "",
         summary: listing.summary ?? "",
         description: listing.description,
         addressLine1: listing.addressLine1,
@@ -244,6 +249,7 @@ export default function HostListingDetailPage() {
     try {
       await updateListing.mutateAsync({
         title: values.title,
+        category: values.category || null,
         summary: values.summary,
         description: values.description,
         addressLine1: values.addressLine1,
@@ -531,6 +537,11 @@ export default function HostListingDetailPage() {
                   {listing.status.replace("_", " ")}
                 </span>
                 <h1 className="text-3xl font-semibold text-slate-900">{listing.title}</h1>
+                {listing.category && (
+                  <span className="w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium capitalize text-slate-600">
+                    {listing.category.replace("_", " ")}
+                  </span>
+                )}
                 <p className="text-sm text-slate-600">
                   {listing.addressLine1}, {listing.city}, {listing.country}
                 </p>
@@ -724,6 +735,20 @@ export default function HostListingDetailPage() {
                   <label className="space-y-2 text-sm">
                     <span className="font-semibold text-slate-800">Title</span>
                     <Input {...register("title", { required: true })} />
+                  </label>
+                  <label className="space-y-2 text-sm">
+                    <span className="font-semibold text-slate-800">Category</span>
+                    <select
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      {...register("category")}
+                    >
+                      <option value="">Select a category</option>
+                      {LISTING_CATEGORIES.map((cat) => (
+                        <option key={cat.value} value={cat.value}>
+                          {cat.label}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label className="space-y-2 text-sm">
                     <span className="font-semibold text-slate-800">Summary</span>

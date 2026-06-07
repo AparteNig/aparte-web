@@ -8,6 +8,7 @@ import {
   SOCKET_EVENTS,
   type BookingNewPayload,
   type BookingUpdatedPayload,
+  type BreakfastRequestedPayload,
   type ListingUpdatedPayload,
   type HostUpdatedPayload,
   type PayoutNewPayload,
@@ -42,6 +43,16 @@ export function useDashboardEvents(entityType: "host" | "admin"): void {
         toast(`Booking ${payload.status}`);
       } else {
         toast(`Booking updated — ${payload.guestName}`);
+      }
+    };
+
+    const onBreakfastRequested = (payload: BreakfastRequestedPayload) => {
+      queryClient.invalidateQueries({ queryKey: hostBookingsQueryKey });
+      queryClient.invalidateQueries({ queryKey: ["admin", "bookings"] });
+      if (entityType === "host") {
+        toast.success(`Breakfast request from ${payload.guestName}`);
+      } else {
+        toast.success(`Breakfast request — ${payload.listingTitle}`);
       }
     };
 
@@ -84,6 +95,7 @@ export function useDashboardEvents(entityType: "host" | "admin"): void {
 
     socket.on(SOCKET_EVENTS.BOOKING_NEW, onBookingNew);
     socket.on(SOCKET_EVENTS.BOOKING_UPDATED, onBookingUpdated);
+    socket.on(SOCKET_EVENTS.BREAKFAST_REQUESTED, onBreakfastRequested);
     socket.on(SOCKET_EVENTS.LISTING_UPDATED, onListingUpdated);
     socket.on(SOCKET_EVENTS.HOST_UPDATED, onHostUpdated);
     socket.on(SOCKET_EVENTS.PAYOUT_NEW, onPayoutNew);
@@ -92,6 +104,7 @@ export function useDashboardEvents(entityType: "host" | "admin"): void {
     return () => {
       socket.off(SOCKET_EVENTS.BOOKING_NEW, onBookingNew);
       socket.off(SOCKET_EVENTS.BOOKING_UPDATED, onBookingUpdated);
+      socket.off(SOCKET_EVENTS.BREAKFAST_REQUESTED, onBreakfastRequested);
       socket.off(SOCKET_EVENTS.LISTING_UPDATED, onListingUpdated);
       socket.off(SOCKET_EVENTS.HOST_UPDATED, onHostUpdated);
       socket.off(SOCKET_EVENTS.PAYOUT_NEW, onPayoutNew);

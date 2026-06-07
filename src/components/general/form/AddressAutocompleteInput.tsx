@@ -3,10 +3,10 @@
 import { forwardRef, useEffect, useRef } from "react";
 
 import { Input, type InputProps } from "@/components/ui/input";
-import { attachPlacesAutocomplete } from "./address-autocomplete";
+import { attachPlacesAutocomplete, type PlaceResult } from "./address-autocomplete";
 
 type AddressAutocompleteInputProps = InputProps & {
-  onPlaceSelected?: (formatted: string) => void;
+  onPlaceSelected?: (formatted: string, place: PlaceResult) => void;
 };
 
 const AddressAutocompleteInput = forwardRef<HTMLInputElement, AddressAutocompleteInputProps>(
@@ -17,7 +17,7 @@ const AddressAutocompleteInput = forwardRef<HTMLInputElement, AddressAutocomplet
       let cleanup: (() => void) | null = null;
       let active = true;
       const init = async () => {
-        cleanup = await attachPlacesAutocomplete(inputRef.current, (formatted) => {
+        cleanup = await attachPlacesAutocomplete(inputRef.current, (formatted, place) => {
           if (!active || !inputRef.current) return;
           if (onChange) {
             const event = {
@@ -26,7 +26,7 @@ const AddressAutocompleteInput = forwardRef<HTMLInputElement, AddressAutocomplet
             } as unknown as React.ChangeEvent<HTMLInputElement>;
             onChange(event);
           }
-          onPlaceSelected?.(formatted);
+          onPlaceSelected?.(formatted, place);
         });
       };
       init();

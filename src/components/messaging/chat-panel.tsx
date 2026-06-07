@@ -258,13 +258,13 @@ export default function ChatPanel({
   const openByBookingMutation = useMutation({
     mutationFn: async (id: string) => {
       if (!token) throw new Error("Missing auth token");
-      return fetchWithAuth<{ id: number }>(`/conversations/booking/${id}`, token, { method: "POST" });
+      return fetchWithAuth<{ conversation: { id: number } }>(`/conversations/booking/${id}`, token, { method: "POST" });
     },
     onSuccess: (payload) => {
-      setConversationId(payload.id);
+      setConversationId(payload.conversation.id);
       setShowList(false);
       setError(null);
-      joinRoom(payload.id);
+      joinRoom(payload.conversation.id);
       conversationsQuery.refetch();
     },
     onError: (err: unknown) => {
@@ -404,6 +404,13 @@ export default function ChatPanel({
       }
       const key = (uploadPayload as { key?: string }).key;
       if (!key) throw new Error("Upload failed.");
+      setRealtimeMessages((prev) =>
+        prev.map((item) =>
+          item.localId === localId
+            ? { ...item, mediaKey: key }
+            : item
+        )
+      );
       const ack = await socketSend(conversationId, null, key);
       setRealtimeMessages((prev) =>
         prev.map((item) =>

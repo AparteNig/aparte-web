@@ -18,18 +18,22 @@ import {
   useMoveListingToDraftMutation,
   usePublishListingMutation,
 } from "@/hooks/use-host-listings";
-import type { HostListing } from "@/types/listing";
+import type { HostListing, ListingCategory } from "@/types/listing";
+import { LISTING_CATEGORIES } from "@/types/listing";
 import { cn } from "@/lib/utils";
 import PillMultiSelect from "@/components/general/form/PillMultiSelect";
 
 type ListingFormValues = {
   title: string;
+  category: ListingCategory | "";
   description: string;
   addressLine1: string;
   city: string;
   country: string;
   nightlyPrice: string;
   maxGuests: string;
+  bedrooms: string;
+  bathrooms: string;
   amenities: string[];
   houseRules: string[];
   newListingPromotionPercent: string;
@@ -39,12 +43,15 @@ type ListingFormValues = {
 
 const initialFormValues: ListingFormValues = {
   title: "",
+  category: "",
   description: "",
   addressLine1: "",
   city: "",
   country: "Nigeria",
   nightlyPrice: "",
   maxGuests: "1",
+  bedrooms: "1",
+  bathrooms: "1",
   amenities: [],
   houseRules: [],
   newListingPromotionPercent: "0",
@@ -104,7 +111,7 @@ export default function HostListingsPage() {
   const draftListing = useMoveListingToDraftMutation();
   const deleteListing = useDeleteListingMutation();
 
-  const { register, control, handleSubmit, reset, watch } = useForm<ListingFormValues>({
+  const { register, control, handleSubmit, reset, watch, setValue } = useForm<ListingFormValues>({
     defaultValues: initialFormValues,
   });
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -139,10 +146,15 @@ export default function HostListingsPage() {
         "country",
         "nightlyPrice",
         "maxGuests",
+        "bedrooms",
+        "bathrooms",
       ];
       baseFields.forEach((field) => {
         formData.append(field, String(values[field] ?? ""));
       });
+      if (values.category) {
+        formData.append("category", values.category);
+      }
       if (values.amenities.length > 0) {
         formData.set("amenities", JSON.stringify(values.amenities));
       }
@@ -257,6 +269,20 @@ export default function HostListingsPage() {
                     {...register("title", { required: true })}
                   />
                 </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-semibold text-slate-800">Category</span>
+                  <select
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    {...register("category")}
+                  >
+                    <option value="">Select a category</option>
+                    {LISTING_CATEGORIES.map((cat) => (
+                      <option key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <label className="space-y-2 text-sm md:col-span-2">
                   <span className="font-semibold text-slate-800">Description</span>
                   <textarea
@@ -271,6 +297,11 @@ export default function HostListingsPage() {
                   <AddressAutocompleteInput
                     placeholder="1 Admiralty Way"
                     {...register("addressLine1", { required: true })}
+                    onPlaceSelected={(_formatted, place) => {
+                      setValue("addressLine1", place.addressLine1);
+                      if (place.city) setValue("city", place.city);
+                      if (place.country) setValue("country", place.country);
+                    }}
                   />
                 </label>
                 <label className="space-y-2 text-sm">
@@ -293,6 +324,14 @@ export default function HostListingsPage() {
                 <label className="space-y-2 text-sm">
                   <span className="font-semibold text-slate-800">Max guests</span>
                   <Input type="number" min="1" {...register("maxGuests", { required: true })} />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-semibold text-slate-800">Bedrooms</span>
+                  <Input type="number" min="1" {...register("bedrooms", { required: true })} />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-semibold text-slate-800">Bathrooms</span>
+                  <Input type="number" min="1" {...register("bathrooms", { required: true })} />
                 </label>
                 <div className="space-y-2 text-sm md:col-span-2">
                   <Controller
@@ -474,6 +513,9 @@ export default function HostListingsPage() {
                   <div className="flex flex-col gap-1">
                     <CardTitle>{listing.title}</CardTitle>
                     <p className="text-sm text-slate-500">
+                      {listing.category && (
+                        <span className="capitalize">{listing.category.replace("_", " ")} · </span>
+                      )}
                       {listing.city}, {listing.country} · ₦{listing.nightlyPrice.toLocaleString()} ·
                       Caution ₦{(listing.cautionFee ?? 0).toLocaleString()}
                     </p>

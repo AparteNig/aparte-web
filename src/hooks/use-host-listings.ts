@@ -93,6 +93,7 @@ export const useUpdateListingMutation = (listingId?: number) => {
         Pick<
           HostListing,
           | "title"
+          | "category"
           | "summary"
           | "description"
           | "addressLine1"
