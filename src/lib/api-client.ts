@@ -486,6 +486,35 @@ export const createCustomerBookingWithToken = (
     },
   });
 
+export const initializePaymentWithToken = (bookingId: number, token: string) =>
+  apiFetch<{ reference: string; accessCode: string; authorizationUrl: string; amount: number }>(
+    "/payments/initialize",
+    {
+      method: "POST",
+      body: JSON.stringify({ bookingId }),
+      auth: false,
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+
+export const verifyPaymentWithToken = (reference: string, token: string) =>
+  apiFetch<{ settled: boolean; status: string }>("/payments/verify", {
+    method: "POST",
+    body: JSON.stringify({ reference }),
+    auth: false,
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+export const cancelCustomerBookingWithToken = (bookingId: number, token: string) =>
+  apiFetch<{ booking: HostBooking; refund: { refunded: boolean; reason?: string } }>(
+    `/customer/bookings/${bookingId}/cancel`,
+    {
+      method: "POST",
+      auth: false,
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+
 export const checkInCustomerBooking = (bookingId: number) =>
   apiFetch<{ booking: HostBooking }>(`/customer/bookings/${bookingId}/checkin`, {
     method: "POST",

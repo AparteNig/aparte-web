@@ -262,12 +262,15 @@ export default function HostBookingsPage() {
                                 "rounded-full px-3 py-1 text-xs font-semibold",
                                 booking.status === "confirmed"
                                   ? "bg-emerald-100 text-emerald-700"
-                                  : booking.status === "pending"
+                                  : booking.status === "pending" ||
+                                    booking.status === "pending_payment"
                                   ? "bg-amber-100 text-amber-700"
                                   : "bg-slate-100 text-slate-600",
                               )}
                             >
-                              {booking.status}
+                              {booking.status === "pending_payment"
+                                ? "awaiting payment"
+                                : booking.status}
                             </span>
                             <p className="text-xs text-slate-500">₦{amount.toLocaleString()}</p>
                           </td>

@@ -14,11 +14,14 @@ import {
   createCustomerBookingWithToken,
   guestCheckoutCustomerBooking,
   getPublicListings,
+  initializePaymentWithToken,
   loginUserRequest,
   markBookingCheckoutDue,
   type CreateCustomerBookingPayload,
   verifyOtpRequest,
+  verifyPaymentWithToken,
 } from "@/lib/api-client";
+import { openPaystackCheckout } from "@/lib/paystack-checkout";
 import { hostBookingsQueryKey, useHostBookingsQuery } from "@/hooks/use-bookings";
 import { useHostListingsQuery } from "@/hooks/use-host-listings";
 import { cn } from "@/lib/utils";
@@ -44,6 +47,7 @@ const USER_EMAIL_KEY = "aparte_test_booking_user_email";
 export default function TestBookingPage() {
   const [formState, setFormState] = useState(initialFormState);
   const [lastBooking, setLastBooking] = useState<HostBooking | null>(null);
+  const [pendingPaymentBookingId, setPendingPaymentBookingId] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const [overlayState, setOverlayState] = useState<{ title: string; message: string } | null>(null);
@@ -142,6 +146,57 @@ export default function TestBookingPage() {
   const hideOverlay = () => setOverlayState(null);
   const showAlert = (title: string, message: string) => setAlertModal({ title, message });
 
+  const startPayment = async (bookingId: number) => {
+    if (!userToken) {
+      showAlert("Payment failed", "Log in as a user before paying.");
+      return;
+    }
+    try {
+      showOverlay("Starting payment...", "Initializing Paystack transaction.");
+      const init = await initializePaymentWithToken(bookingId, userToken);
+      hideOverlay();
+      openPaystackCheckout({
+        accessCode: init.accessCode,
+        onSuccess: async (reference) => {
+          try {
+            showOverlay("Confirming payment...", "Verifying the transaction with Paystack.");
+            const result = await verifyPaymentWithToken(reference, userToken);
+            setPendingPaymentBookingId(result.settled ? null : bookingId);
+            invalidateBookings();
+            showAlert(
+              result.settled ? "Payment confirmed" : "Payment pending",
+              result.settled
+                ? `Booking #${bookingId} is now confirmed.`
+                : `Payment status: ${result.status}. The booking will confirm automatically once Paystack notifies us.`,
+            );
+          } catch (error) {
+            setPendingPaymentBookingId(bookingId);
+            showAlert(
+              "Verification failed",
+              error instanceof Error ? error.message : "Could not verify the payment.",
+            );
+          } finally {
+            hideOverlay();
+          }
+        },
+        onClose: () => {
+          setPendingPaymentBookingId(bookingId);
+          showAlert(
+            "Payment not completed",
+            "You can retry the payment below — unpaid bookings expire after 30 minutes.",
+          );
+        },
+      });
+    } catch (error) {
+      hideOverlay();
+      setPendingPaymentBookingId(bookingId);
+      showAlert(
+        "Payment failed to start",
+        error instanceof Error ? error.message : "Could not initialize the payment.",
+      );
+    }
+  };
+
   const createBookingMutation = useMutation({
     mutationFn: (payload: CreateCustomerBookingPayload) => {
       if (!userToken) {
@@ -161,7 +216,7 @@ export default function TestBookingPage() {
         booking,
       );
       invalidateBookings();
-      showAlert("Booking created", `Booking #${booking.id} is now confirmed.`);
+      void startPayment(booking.id);
     },
     onError: (error: unknown) => {
       setLastBooking(null);
@@ -649,8 +704,21 @@ export default function TestBookingPage() {
               )}
               {lastBooking && (
                 <span className="text-sm text-slate-500">
-                  Booking #{lastBooking.id} confirmed. Check the landlord dashboard for updates.
+                  Booking #{lastBooking.id} created
+                  {pendingPaymentBookingId === lastBooking.id
+                    ? " — payment pending."
+                    : ". Check the landlord dashboard for updates."}
                 </span>
+              )}
+              {pendingPaymentBookingId !== null && (
+                <Button
+                  type="secondary"
+                  buttonType="button"
+                  className="rounded-2xl border px-4 py-2 text-sm"
+                  onClick={() => void startPayment(pendingPaymentBookingId)}
+                >
+                  Retry payment for booking #{pendingPaymentBookingId}
+                </Button>
               )}
             </div>
           </form>
