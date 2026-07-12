@@ -62,9 +62,7 @@ export const ConversationSocketProvider = ({
     if (!token) return;
     const socket = io(API_BASE_URL, {
       auth: { token },
-      // Polling first: App Runner doesn't support WebSockets, so the
-      // upgrade fails there and the client stays on long-polling.
-      transports: ["polling", "websocket"]
+      transports: ["websocket"]
     });
     socketRef.current = socket;
     setLiveSocket(socket);
