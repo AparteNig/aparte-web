@@ -155,7 +155,7 @@ export default function TestBookingPage() {
       showOverlay("Starting payment...", "Initializing Paystack transaction.");
       const init = await initializePaymentWithToken(bookingId, userToken);
       hideOverlay();
-      openPaystackCheckout({
+      await openPaystackCheckout({
         accessCode: init.accessCode,
         onSuccess: async (reference) => {
           try {
