@@ -737,10 +737,12 @@ export default function HostListingDetailPage() {
                     <Input {...register("title", { required: true })} />
                   </label>
                   <label className="space-y-2 text-sm">
-                    <span className="font-semibold text-slate-800">Category</span>
+                    <span className="font-semibold text-slate-800">
+                      Category <span className="text-rose-500">*</span>
+                    </span>
                     <select
                       className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                      {...register("category")}
+                      {...register("category", { required: true })}
                     >
                       <option value="">Select a category</option>
                       {LISTING_CATEGORIES.map((cat) => (
