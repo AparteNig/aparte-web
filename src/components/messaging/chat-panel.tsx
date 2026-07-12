@@ -216,9 +216,16 @@ export default function ChatPanel({
   // Subscribe to real-time messages from socket
   useEffect(() => {
     if (!socket || conversationId === null) return;
-    const handler = async (msg: MessageNew) => {
+    const handler = (msg: MessageNew) => {
       if (msg.conversationId !== conversationId) return;
-      const row = await messageToRow(msg, token);
+      const row: MessageRow = {
+        id: msg.id,
+        author: `${msg.senderType}_${msg.senderId}`,
+        body: msg.body,
+        createdAt: msg.createdAt,
+        mediaKey: msg.mediaKey ?? undefined,
+        deliveryStatus: "sent"
+      };
       setRealtimeMessages((prev) => {
         if (prev.some((item) => item.id === msg.id && item.id !== 0)) return prev;
         const optimistic = prev.find(
@@ -230,11 +237,27 @@ export default function ChatPanel({
         );
         if (optimistic) {
           return prev.map((item) =>
-            item.localId === optimistic.localId ? { ...row, localId: item.localId } : item
+            item.localId === optimistic.localId
+              ? { ...row, localId: item.localId, mediaUrl: item.mediaUrl }
+              : item
           );
         }
         return [...prev, row];
       });
+      // Hydrate the signed media URL after the row is already visible
+      if (msg.mediaKey && token) {
+        fetchWithAuth<{ url: string }>(
+          `/uploads/signed-url?key=${encodeURIComponent(msg.mediaKey)}`,
+          token,
+          { method: "GET" }
+        )
+          .then((signed) => {
+            setRealtimeMessages((prev) =>
+              prev.map((item) => (item.id === msg.id ? { ...item, mediaUrl: signed.url } : item))
+            );
+          })
+          .catch(() => { /* ignore — will refresh on image error */ });
+      }
     };
     socket.on("message:new", handler);
     return () => { socket.off("message:new", handler); };
@@ -252,7 +275,7 @@ export default function ChatPanel({
 
   // Scroll to bottom on new message
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
   }, [realtimeMessages.length, conversationId]);
 
   const openByBookingMutation = useMutation({
@@ -791,6 +814,9 @@ export default function ChatPanel({
                             <p className="text-[11px] font-semibold opacity-70">
                               {getAuthorLabel(msg.author)}
                             </p>
+                            {!msg.mediaUrl && msg.mediaKey && (
+                              <div className="mt-2 h-40 w-64 max-w-full animate-pulse rounded-xl bg-slate-200/70" />
+                            )}
                             {msg.mediaUrl && (
                               <div className="mt-2 overflow-hidden rounded-xl">
                                 <img
