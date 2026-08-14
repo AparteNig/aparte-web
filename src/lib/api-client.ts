@@ -256,6 +256,40 @@ export const uploadListingAsset = (listingId: number, file: File) => {
   });
 };
 
+/**
+ * Uploads the listing's Explore clip. The backend re-encodes it to fit under
+ * 2MB, so a raw phone recording is fine here — no client-side compression.
+ * Returns the S3 key to store on the listing via setListingExplorePost.
+ */
+export const uploadExplorePost = (listingId: number, file: File) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("type", "explore");
+  formData.append("entityId", String(listingId));
+  return apiFetch<{ key: string; url: string; size: number }>("/uploads", {
+    method: "POST",
+    body: formData,
+  });
+};
+
+export type ExplorePost = { id: number; url: string; sortOrder: number };
+type ExplorePostsResponse = { explorePosts: ExplorePost[]; max: number };
+
+export const getListingExplorePosts = (listingId: number) =>
+  apiFetch<ExplorePostsResponse>(`/hosts/listings/${listingId}/explore-posts`);
+
+/** Attach an already-uploaded clip. Rejects with 409 once the listing is full. */
+export const addListingExplorePost = (listingId: number, storageKey: string) =>
+  apiFetch<ExplorePostsResponse>(`/hosts/listings/${listingId}/explore-posts`, {
+    method: "POST",
+    body: JSON.stringify({ storageKey }),
+  });
+
+export const deleteListingExplorePost = (listingId: number, postId: number) =>
+  apiFetch<ExplorePostsResponse>(`/hosts/listings/${listingId}/explore-posts/${postId}`, {
+    method: "DELETE",
+  });
+
 export const uploadVehicleAsset = (vehicleId: number, file: File) => {
   const formData = new FormData();
   formData.append("file", file);

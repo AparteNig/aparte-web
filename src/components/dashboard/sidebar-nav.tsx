@@ -49,6 +49,8 @@ export type NavItem = {
   href: string;
   icon?: IconName;
   requiresSuperAdmin?: boolean;
+  /** Unread count. 0 or undefined renders nothing. */
+  badge?: number;
 };
 
 type SidebarNavProps = {
@@ -120,12 +122,28 @@ export const SidebarNav = ({ items, logoutHref, cookieName }: SidebarNavProps) =
                 )}
               >
                 {IconComponent && (
-                  <IconComponent
-                    color={isActive ? "#00AC35" : "#1F2937"}
-                    color2={isActive ? "#00AC35" : "#1F2937"}
-                  />
+                  <span className="relative shrink-0">
+                    <IconComponent
+                      color={isActive ? "#00AC35" : "#1F2937"}
+                      color2={isActive ? "#00AC35" : "#1F2937"}
+                    />
+                    {/* When collapsed there is no room for a count, so the
+                        badge shrinks to a dot that still says "something is
+                        waiting here". */}
+                    {collapsed && Boolean(item.badge) && (
+                      <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" />
+                    )}
+                  </span>
                 )}
-                {!collapsed && <span>{item.label}</span>}
+                {!collapsed && <span className="flex-1">{item.label}</span>}
+                {!collapsed && Boolean(item.badge) && (
+                  <span
+                    aria-label={`${item.badge} unread`}
+                    className="min-w-[20px] rounded-full bg-rose-500 px-1.5 py-0.5 text-center text-[11px] font-semibold leading-4 tabular-nums text-white"
+                  >
+                    {item.badge! > 99 ? "99+" : item.badge}
+                  </span>
+                )}
               </Link>
             );
           })}

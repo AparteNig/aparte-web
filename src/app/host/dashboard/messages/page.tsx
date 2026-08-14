@@ -17,15 +17,13 @@ const HostMessagesContent = () => {
   }, []);
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-2xl font-semibold">Guest messages</h2>
-      <p className="text-slate-600">Reply quickly and keep response times high.</p>
-      <ChatPanel
-        token={token}
-        title="Host messaging workspace"
-        initialBookingId={Number.isNaN(bookingId) ? undefined : bookingId}
-      />
-    </div>
+    // ChatPanel renders its own header, so the page no longer repeats one —
+    // there were previously two competing titles stacked above the list.
+    <ChatPanel
+      token={token}
+      title="Guest messages"
+      initialBookingId={Number.isNaN(bookingId) ? undefined : bookingId}
+    />
   );
 };
 

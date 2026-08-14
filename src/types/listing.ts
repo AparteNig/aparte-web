@@ -74,6 +74,8 @@ export type HostListing = {
   weeklyDiscountPercent: number;
   monthlyDiscountPercent: number;
   status: ListingStatus;
+  /** Number of Explore clips attached — see /hosts/listings/:id/explore-posts. */
+  explorePosts?: { id: number; url: string; sortOrder: number }[];
   reviewNotes: string;
   publishedAt: string | null;
   createdAt: string;

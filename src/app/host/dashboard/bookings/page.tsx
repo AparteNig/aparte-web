@@ -109,11 +109,10 @@ export default function HostBookingsPage() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
 
-  useEffect(() => {
-    if (!selectedListingId && listings.length > 0) {
-      setSelectedListingId(listings[0].id);
-    }
-  }, [listings, selectedListingId]);
+  // No auto-select on purpose: defaulting to the first listing silently hid
+  // every booking on every other property, with nothing on screen saying a
+  // filter was applied — bookings looked like they had disappeared. The page
+  // now starts on "All listings" and the host chooses to narrow it.
 
   const { data: blocksData, isLoading: calendarLoading } = useListingCalendarQuery(
     selectedListingId,
@@ -123,10 +122,23 @@ export default function HostBookingsPage() {
     ? (blocksData as ListingCalendarBlock[])
     : [];
 
+  const selectedListing = useMemo(
+    () => listings.find((listing) => listing.id === selectedListingId) ?? null,
+    [listings, selectedListingId],
+  );
+
   const bookingsForListing = useMemo(() => {
-    if (!selectedListingId) return bookings;
-    return bookings.filter((booking) => booking.listingId === selectedListingId);
+    const scoped = selectedListingId
+      ? bookings.filter((booking) => booking.listingId === selectedListingId)
+      : bookings;
+    // Newest first. The API orders by stay date, which buries a booking made
+    // today for a stay next year beneath older reservations starting sooner.
+    return [...scoped].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
   }, [bookings, selectedListingId]);
+
+  const hiddenBookingCount = bookings.length - bookingsForListing.length;
 
   const daysInMonth = useMemo(() => {
     const [year, monthStr] = month.split("-");
@@ -155,13 +167,22 @@ export default function HostBookingsPage() {
           <div>
             <label className="text-xs font-semibold uppercase text-slate-500">Filter by listing</label>
             <select
-              className="mt-2 w-full rounded-2xl border border-slate-200 p-3 text-sm"
+              className={cn(
+                "mt-2 w-full rounded-2xl border p-3 text-sm transition",
+                selectedListingId
+                  ? "border-primary bg-primary/5 font-medium text-slate-900"
+                  : "border-slate-200",
+              )}
               value={selectedListingId ?? ""}
-              onChange={(e) => setSelectedListingId(Number(e.target.value))}
+              onChange={(e) =>
+                setSelectedListingId(e.target.value ? Number(e.target.value) : undefined)
+              }
             >
+              {/* Without this the host could never get back to a full view */}
+              <option value="">All listings ({bookings.length})</option>
               {listings.map((listing) => (
                 <option key={listing.id} value={listing.id}>
-                  {listing.title}
+                  {listing.title} ({bookings.filter((b) => b.listingId === listing.id).length})
                 </option>
               ))}
             </select>
@@ -212,10 +233,46 @@ export default function HostBookingsPage() {
         <section className="grid gap-4 md:grid-cols-3">
           <Card className="border-slate-200 md:col-span-2">
             <CardHeader>
-              <CardTitle>Bookings</CardTitle>
-              <p className="text-sm text-slate-500">
-                Recent reservations across your listings. Filter using the dropdown above.
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <CardTitle>
+                  {selectedListing ? selectedListing.title : "All listings"}
+                </CardTitle>
+                <span className="text-xs text-slate-500">
+                  {bookingsForListing.length} of {bookings.length} bookings
+                </span>
+              </div>
+              {/* The filter has to announce itself here, next to the rows it is
+                  removing — a quiet dropdown elsewhere on the page reads as
+                  "these are all my bookings" when it is not. */}
+              {selectedListing ? (
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                    Filtered to {selectedListing.title}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedListingId(undefined)}
+                      className="rounded-full px-1 text-primary/70 transition hover:text-primary"
+                      aria-label="Show bookings for all listings"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                  {hiddenBookingCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedListingId(undefined)}
+                      className="text-xs text-slate-500 underline-offset-2 hover:underline"
+                    >
+                      {hiddenBookingCount} booking{hiddenBookingCount === 1 ? "" : "s"} on other
+                      listings hidden
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Every reservation across your listings, newest first.
+                </p>
+              )}
             </CardHeader>
             <CardContent className="overflow-auto">
               {bookingsQuery.isLoading ? (
@@ -308,9 +365,39 @@ export default function HostBookingsPage() {
           <Card className="border-slate-200">
             <CardHeader>
               <CardTitle>Calendar</CardTitle>
-              <p className="text-sm text-slate-500">Booked days include naming; other blocks are red.</p>
+              <p className="text-sm text-slate-500">
+                {selectedListing
+                  ? `${selectedListing.title} — booked days are green, other blocks red.`
+                  : "A calendar belongs to one property."}
+              </p>
             </CardHeader>
             <CardContent className="space-y-3">
+              {/* A calendar cannot show every listing at once, so when the
+                  bookings table is unfiltered this asks for a choice rather
+                  than silently showing one property's availability. */}
+              {!selectedListingId ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                  <p className="text-sm font-medium text-slate-700">Pick a listing</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Choose one above to see and manage its availability.
+                  </p>
+                  {listings.length > 0 && (
+                    <div className="mt-3 flex flex-wrap justify-center gap-2">
+                      {listings.slice(0, 4).map((listing) => (
+                        <button
+                          key={listing.id}
+                          type="button"
+                          onClick={() => setSelectedListingId(listing.id)}
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-primary hover:text-primary"
+                        >
+                          {listing.title}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
               <label className="block text-xs font-semibold uppercase text-slate-500">
                 Month
                 <Input
@@ -351,6 +438,8 @@ export default function HostBookingsPage() {
                     })}
                   </div>
                 </div>
+              )}
+                </>
               )}
             </CardContent>
           </Card>

@@ -52,6 +52,7 @@ type ConversationSummary = {
   hostEmail?: string | null;
   hostAvatarUrl?: string | null;
   userEmail?: string | null;
+  unreadCount?: number | null;
 };
 
 type ChatPanelProps = {
@@ -63,6 +64,54 @@ type ChatPanelProps = {
 
 const buildUrl = (path: string) =>
   path.startsWith("http") ? path : `${API_BASE_URL.replace(/\/$/, "")}${path}`;
+
+/** "3m" · "2h" · "Yesterday" · "12 Aug" — chat lists want age, not a timestamp. */
+const formatRelativeTime = (value?: string | null) => {
+  if (!value) return null;
+  const then = new Date(value);
+  if (Number.isNaN(then.getTime())) return null;
+  const minutes = Math.floor((Date.now() - then.getTime()) / 60000);
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  if (hours < 48) return "Yesterday";
+  return then.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+};
+
+/** "12–15 Aug", or "28 Aug – 2 Sep" when the stay crosses a month. */
+const formatStayRange = (start?: string | null, end?: string | null) => {
+  if (!start || !end) return null;
+  const from = new Date(start);
+  const to = new Date(end);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return null;
+  const sameMonth = from.getMonth() === to.getMonth() && from.getFullYear() === to.getFullYear();
+  const day = (d: Date) => d.toLocaleDateString(undefined, { day: "numeric" });
+  const dayMonth = (d: Date) => d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return sameMonth ? `${day(from)}–${dayMonth(to)}` : `${dayMonth(from)} – ${dayMonth(to)}`;
+};
+
+/**
+ * Who the viewer is actually talking to. A host's own name and avatar on every
+ * row of their own inbox carries no information — they need the guest.
+ */
+const resolveCounterpart = (
+  conversation: ConversationSummary,
+  entityType: "user" | "host" | "admin" | null,
+) => {
+  const guest = conversation.guestName ?? conversation.userEmail ?? null;
+  const host =
+    conversation.hostDisplayName ?? conversation.hostName ?? conversation.hostEmail ?? null;
+
+  if (entityType === "host") return { name: guest, avatarUrl: null, role: "Guest" as const };
+  if (entityType === "user") {
+    return { name: host, avatarUrl: conversation.hostAvatarUrl ?? null, role: "Host" as const };
+  }
+  // Admin sees whichever side exists, host first — that is who they support.
+  return host
+    ? { name: host, avatarUrl: conversation.hostAvatarUrl ?? null, role: "Host" as const }
+    : { name: guest, avatarUrl: null, role: "Guest" as const };
+};
 
 const fetchWithAuth = async <T,>(
   path: string,
@@ -175,6 +224,13 @@ export default function ChatPanel({
     staleTime: 1000 * 30
   });
 
+  // Held in a ref so the socket listeners below can refetch without being
+  // re-bound every time the query object changes identity.
+  const conversationsQueryRef = useRef<(() => void) | null>(null);
+  conversationsQueryRef.current = () => {
+    void conversationsQuery.refetch();
+  };
+
   const bookingsQuery = useQuery<BookingOption[]>({
     queryKey: ["bookings-for-chat", token, entityType],
     queryFn: async () => {
@@ -262,6 +318,23 @@ export default function ChatPanel({
     socket.on("message:new", handler);
     return () => { socket.off("message:new", handler); };
   }, [socket, conversationId, token]);
+
+  // Any incoming message changes the list — a new unread badge on another
+  // thread, a new last-message preview, a reordered row. The handler above
+  // only touches the open conversation, so without this a message arriving
+  // elsewhere stayed invisible until a manual refresh.
+  useEffect(() => {
+    if (!socket) return;
+    const refreshList = () => {
+      conversationsQueryRef.current?.();
+    };
+    socket.on("message:new", refreshList);
+    socket.on("conversation:new", refreshList);
+    return () => {
+      socket.off("message:new", refreshList);
+      socket.off("conversation:new", refreshList);
+    };
+  }, [socket]);
 
   // Mark conversation as read when opened
   useEffect(() => {
@@ -505,6 +578,13 @@ export default function ChatPanel({
   const guestDisplayName = activeConversation?.guestName ?? activeConversation?.userEmail ?? "Guest";
   const hostAvatarUrl = activeConversation?.hostAvatarUrl ?? null;
   const hostIdentity = getHostIdentity(activeConversation?.hostId ?? null);
+  const activeCounterpart = activeConversation
+    ? resolveCounterpart(activeConversation, entityType)
+    : { name: null, avatarUrl: null, role: "Guest" as const };
+  const activeStay = formatStayRange(
+    activeConversation?.bookingStartDate,
+    activeConversation?.bookingEndDate,
+  );
   const isAdminMember = Boolean(activeConversation?.adminId);
 
   const getAuthorLabel = (author?: string) => {
@@ -553,34 +633,26 @@ export default function ChatPanel({
                 <div className="space-y-2">
                   {conversationsQuery.data.map((conversation) => {
                     const isActive = conversation.id === conversationId;
-                    const bookingLabel = conversation.bookingId
-                      ? `Booking #${conversation.bookingId}`
-                      : `Conversation #${conversation.id}`;
-                    const listingLine = conversation.listingTitle
-                      ? `${conversation.listingTitle} · ${conversation.listingCity ?? ""} ${conversation.listingCountry ?? ""}`.trim()
-                      : null;
-                    const dateLine =
-                      conversation.bookingStartDate && conversation.bookingEndDate
-                        ? `${new Date(conversation.bookingStartDate).toLocaleDateString()} – ${new Date(conversation.bookingEndDate).toLocaleDateString()}`
-                        : null;
-                    const subtitleLine = conversation.guestName
-                      ? `Guest ${conversation.guestName}`
-                      : conversation.userEmail
-                        ? `Guest ${conversation.userEmail}`
-                        : conversation.hostDisplayName
-                          ? `Host ${conversation.hostDisplayName}`
-                          : conversation.hostName
-                            ? `Host ${conversation.hostName}`
-                            : conversation.hostEmail
-                              ? `Host ${conversation.hostEmail}`
-                              : null;
-                    const lastMessageTime = conversation.lastMessageAt
-                      ? new Date(conversation.lastMessageAt).toLocaleString()
-                      : conversation.updatedAt
-                        ? new Date(conversation.updatedAt).toLocaleString()
-                        : null;
-                    const hostLabel =
-                      conversation.hostDisplayName ?? conversation.hostName ?? conversation.hostEmail ?? "Host";
+                    // The property is what a host recognises a thread by — it
+                    // leads. The booking number is an internal reference and is
+                    // demoted to a chip; it used to be the boldest thing here.
+                    const property = conversation.listingTitle ?? "Direct message";
+                    const counterpart = resolveCounterpart(conversation, entityType);
+                    const stay = formatStayRange(
+                      conversation.bookingStartDate,
+                      conversation.bookingEndDate,
+                    );
+                    const place = [conversation.listingCity, conversation.listingCountry]
+                      .filter(Boolean)
+                      .join(", ");
+                    const age = formatRelativeTime(
+                      conversation.lastMessageAt ?? conversation.updatedAt,
+                    );
+                    const isClosed = conversation.status && conversation.status !== "active";
+                    // The open thread is being read right now, so its own
+                    // badge would be stale the moment it rendered.
+                    const unread = isActive ? 0 : conversation.unreadCount ?? 0;
+
                     return (
                       <button
                         type="button"
@@ -589,41 +661,91 @@ export default function ChatPanel({
                           setConversationId(conversation.id);
                           setShowList(false);
                         }}
-                        className={`w-full rounded-2xl border p-3 text-left text-sm transition ${
+                        aria-current={isActive}
+                        className={`relative w-full overflow-hidden rounded-2xl border p-3 pl-4 text-left transition active:scale-[0.995] ${
                           isActive
-                            ? "border-emerald-400 bg-white shadow-sm"
-                            : "border-emerald-100 bg-white hover:border-emerald-200"
+                            ? "border-emerald-300 bg-emerald-50/70 shadow-sm"
+                            : "border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/30"
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-3">
-                            {conversation.hostAvatarUrl ? (
-                              <img
-                                src={conversation.hostAvatarUrl}
-                                alt={hostLabel}
-                                className="h-9 w-9 rounded-full object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-800">
-                                {getInitials(hostLabel)}
+                        {/* Accent rail: reads as selection at a glance, without
+                            relying on a border-colour change alone. */}
+                        <span
+                          aria-hidden
+                          className={`absolute inset-y-0 left-0 w-1 rounded-r ${
+                            isActive ? "bg-emerald-500" : "bg-transparent"
+                          }`}
+                        />
+
+                        <div className="flex items-start gap-3">
+                          {counterpart.avatarUrl ? (
+                            <img
+                              src={counterpart.avatarUrl}
+                              alt={counterpart.name ?? counterpart.role}
+                              className="h-10 w-10 shrink-0 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-800">
+                              {getInitials(counterpart.name ?? counterpart.role)}
+                            </div>
+                          )}
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline justify-between gap-2">
+                              <p
+                                className={`truncate tracking-[-0.01em] text-slate-900 ${
+                                  unread > 0 ? "font-bold" : "font-semibold"
+                                }`}
+                              >
+                                {property}
+                              </p>
+                              <div className="flex shrink-0 items-center gap-2">
+                                {age && (
+                                  <span
+                                    className={`text-[11px] tabular-nums ${
+                                      unread > 0 ? "font-semibold text-rose-500" : "text-slate-400"
+                                    }`}
+                                  >
+                                    {age}
+                                  </span>
+                                )}
+                                {unread > 0 && (
+                                  <span
+                                    aria-label={`${unread} unread`}
+                                    className="min-w-[20px] rounded-full bg-rose-500 px-1.5 py-0.5 text-center text-[11px] font-semibold leading-4 tabular-nums text-white"
+                                  >
+                                    {unread > 99 ? "99+" : unread}
+                                  </span>
+                                )}
                               </div>
-                            )}
-                            <div>
-                              <p className="text-sm font-semibold text-slate-800">{bookingLabel}</p>
-                              {subtitleLine && <p className="text-xs text-slate-500">{subtitleLine}</p>}
+                            </div>
+
+                            <p
+                              className={`mt-0.5 truncate text-[13px] ${
+                                unread > 0 ? "font-medium text-slate-800" : "text-slate-600"
+                              }`}
+                            >
+                              {counterpart.name ?? `${counterpart.role} · unnamed`}
+                              {stay && <span className="text-slate-400"> · {stay}</span>}
+                            </p>
+
+                            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400">
+                              {place && <span className="truncate">{place}</span>}
+                              {conversation.bookingId && (
+                                <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium tabular-nums text-slate-500">
+                                  #{conversation.bookingId}
+                                </span>
+                              )}
+                              {/* Only surfaced when it is not the normal state —
+                                  an "active" pill on every row is pure noise. */}
+                              {isClosed && (
+                                <span className="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
+                                  {conversation.status}
+                                </span>
+                              )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {lastMessageTime && (
-                              <span className="text-[11px] text-slate-400">{lastMessageTime}</span>
-                            )}
-                            <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700">
-                              {conversation.status}
-                            </span>
-                          </div>
                         </div>
-                        {listingLine && <p className="mt-1 text-xs text-slate-500">{listingLine}</p>}
-                        {dateLine && <p className="text-xs text-slate-400">{dateLine}</p>}
                       </button>
                     );
                   })}
@@ -718,21 +840,33 @@ export default function ChatPanel({
             {conversationId ? (
               <>
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-100 bg-white/90 px-5 py-4 backdrop-blur">
-                  <div className="flex items-center gap-3">
-                    {hostAvatarUrl ? (
+                  {/* Mirrors the list row: property first, then who and when.
+                      This used to show the viewer's own name and the internal
+                      conversation id, so an open thread gave a host no clue
+                      which apartment or stay they were replying about. */}
+                  <div className="flex min-w-0 items-center gap-3">
+                    {activeCounterpart.avatarUrl ? (
                       <img
-                        src={hostAvatarUrl}
-                        alt={hostDisplayName}
-                        className="h-10 w-10 rounded-full object-cover"
+                        src={activeCounterpart.avatarUrl}
+                        alt={activeCounterpart.name ?? activeCounterpart.role}
+                        className="h-10 w-10 shrink-0 rounded-full object-cover"
                       />
                     ) : (
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-800">
-                        {getInitials(hostDisplayName)}
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-800">
+                        {getInitials(activeCounterpart.name ?? activeCounterpart.role)}
                       </div>
                     )}
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">{hostDisplayName}</p>
-                      <p className="text-xs text-slate-500">ID: {conversationId}</p>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold tracking-[-0.01em] text-slate-900">
+                        {activeConversation?.listingTitle ?? "Direct message"}
+                      </p>
+                      <p className="truncate text-[13px] text-slate-600">
+                        {activeCounterpart.name ?? activeCounterpart.role}
+                        {activeStay && <span className="text-slate-400"> · {activeStay}</span>}
+                        {activeConversation?.bookingId && (
+                          <span className="text-slate-400"> · #{activeConversation.bookingId}</span>
+                        )}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">

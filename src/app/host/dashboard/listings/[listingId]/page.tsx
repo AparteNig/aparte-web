@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useQueryClient } from "@tanstack/react-query";
 
 import Button from "@/components/general/Button";
 import LoadingOverlay from "@/components/general/LoadingOverlay";
@@ -12,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import AddressAutocompleteInput from "@/components/general/form/AddressAutocompleteInput";
 import {
+  hostListingQueryKey,
   useAttachListingPhotosMutation,
   useDeleteListingPhotoMutation,
   useHostListingQuery,
@@ -21,7 +23,14 @@ import {
 } from "@/hooks/use-host-listings";
 import { useHostProfileQuery } from "@/hooks/use-host-profile";
 import { cn } from "@/lib/utils";
-import { uploadListingAsset } from "@/lib/api-client";
+import {
+  addListingExplorePost,
+  deleteListingExplorePost,
+  getListingExplorePosts,
+  uploadExplorePost,
+  uploadListingAsset,
+  type ExplorePost,
+} from "@/lib/api-client";
 import type { ListingCategory } from "@/types/listing";
 import { LISTING_CATEGORIES } from "@/types/listing";
 
@@ -122,6 +131,12 @@ export default function HostListingDetailPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [exploreError, setExploreError] = useState<string | null>(null);
+  const [uploadingExplore, setUploadingExplore] = useState(false);
+  const [explorePosts, setExplorePosts] = useState<ExplorePost[]>([]);
+  const [exploreMax, setExploreMax] = useState(5);
+  const exploreInputRef = useRef<HTMLInputElement | null>(null);
+  const queryClient = useQueryClient();
   const [pendingPhotoRemovals, setPendingPhotoRemovals] = useState<number[]>([]);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
@@ -293,6 +308,82 @@ export default function HostListingDetailPage() {
     setPendingPhotoRemovals((prev) =>
       prev.includes(photoId) ? prev.filter((id) => id !== photoId) : [...prev, photoId],
     );
+  };
+
+  // ── Explore clips ──
+  // Up to EXPLORE_MAX clips per listing. The backend transcodes whatever
+  // arrives down to 2MB, so hosts can hand it a raw phone recording; we only
+  // guard the obviously-wrong cases up front.
+  useEffect(() => {
+    if (!listingId) return;
+    let cancelled = false;
+    getListingExplorePosts(listingId)
+      .then((res) => {
+        if (cancelled) return;
+        setExplorePosts(res.explorePosts);
+        setExploreMax(res.max);
+      })
+      .catch(() => {
+        /* the panel just shows empty — not worth blocking the page for */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listingId]);
+
+  const handleExploreSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!listingId) return;
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    if (files.length === 0) return;
+    setExploreError(null);
+
+    if (files.some((file) => !file.type.startsWith("video/"))) {
+      setExploreError("Explore clips must be video files.");
+      event.target.value = "";
+      return;
+    }
+
+    const room = exploreMax - explorePosts.length;
+    if (files.length > room) {
+      setExploreError(
+        room === 0
+          ? `This listing already has ${exploreMax} clips. Remove one first.`
+          : `Only ${room} more clip${room === 1 ? "" : "s"} can be added.`,
+      );
+      event.target.value = "";
+      return;
+    }
+
+    setUploadingExplore(true);
+    try {
+      for (const file of files) {
+        const upload = await uploadExplorePost(listingId, file);
+        const res = await addListingExplorePost(listingId, upload.key);
+        setExplorePosts(res.explorePosts);
+        setExploreMax(res.max);
+      }
+      await queryClient.invalidateQueries({ queryKey: hostListingQueryKey(listingId) });
+    } catch (error) {
+      setExploreError(error instanceof Error ? error.message : "Failed to upload the clip.");
+    } finally {
+      setUploadingExplore(false);
+      if (event.target) event.target.value = "";
+    }
+  };
+
+  const handleExploreRemove = async (postId: number) => {
+    if (!listingId) return;
+    setExploreError(null);
+    setUploadingExplore(true);
+    try {
+      const res = await deleteListingExplorePost(listingId, postId);
+      setExplorePosts(res.explorePosts);
+      await queryClient.invalidateQueries({ queryKey: hostListingQueryKey(listingId) });
+    } catch (error) {
+      setExploreError(error instanceof Error ? error.message : "Failed to remove the clip.");
+    } finally {
+      setUploadingExplore(false);
+    }
   };
 
   const handleMediaSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -582,6 +673,93 @@ export default function HostListingDetailPage() {
                   <p className="text-xs text-slate-500">Supported: JPG, PNG, MP4 up to 10MB per file.</p>
                 </div>
               )}
+
+              {/* ── Explore clip ── */}
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-slate-900">Explore clips</p>
+                    <p className="text-xs text-slate-500">
+                      Short vertical videos that front this listing in the app&apos;s Explore feed.
+                      Each one is compressed to 2MB and trimmed to 15 seconds automatically.
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "rounded-full px-3 py-1 text-xs font-medium",
+                      explorePosts.length > 0
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-slate-200 text-slate-600",
+                    )}
+                  >
+                    {explorePosts.length} of {exploreMax}
+                  </span>
+                </div>
+
+                {exploreError && (
+                  <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                    {exploreError}
+                  </div>
+                )}
+
+                {explorePosts.length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {explorePosts.map((post, index) => (
+                      <div key={post.id} className="group relative">
+                        {/* Playable inline so the host can check the clip
+                            without opening the phone app. */}
+                        <video
+                          src={post.url}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          className="h-56 w-32 rounded-xl bg-black object-cover"
+                        />
+                        <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white">
+                          {index + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleExploreRemove(post.id)}
+                          disabled={uploadingExplore}
+                          aria-label={`Remove clip ${index + 1}`}
+                          className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white transition hover:bg-rose-600 disabled:opacity-50"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
+                  <button
+                    type="button"
+                    className="text-primary underline-offset-4 transition hover:underline disabled:opacity-50"
+                    onClick={() => exploreInputRef.current?.click()}
+                    disabled={uploadingExplore || explorePosts.length >= exploreMax}
+                  >
+                    {uploadingExplore
+                      ? "Processing video…"
+                      : explorePosts.length >= exploreMax
+                      ? `Limit of ${exploreMax} reached`
+                      : "Add clip +"}
+                  </button>
+                  <input
+                    ref={exploreInputRef}
+                    type="file"
+                    accept="video/*"
+                    multiple
+                    className="hidden"
+                    onChange={handleExploreSelection}
+                  />
+                </div>
+                {uploadingExplore && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Re-encoding on the server — larger files take a few seconds each.
+                  </p>
+                )}
+              </div>
             </div>
           </section>
 
