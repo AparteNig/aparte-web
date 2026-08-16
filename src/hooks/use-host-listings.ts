@@ -104,7 +104,6 @@ export const useUpdateListingMutation = (listingId?: number) => {
           | "postalCode"
           | "nightlyPrice"
           | "cleaningFee"
-          | "serviceFee"
           | "maxGuests"
           | "bedrooms"
           | "bathrooms"

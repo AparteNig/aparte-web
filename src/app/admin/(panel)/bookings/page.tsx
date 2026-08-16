@@ -17,6 +17,7 @@ import type { AdminBookingRow } from "@/types/admin";
 
 const BOOKING_STATUS_OPTIONS = [
   "pending",
+  "awaiting_approval",
   "confirmed",
   "ongoing",
   "checkout_due",
@@ -64,7 +65,8 @@ function BookingTable({
           {rows.map((row) => {
             const booking = row.booking;
             const currentValue = statusDraft[booking.id] ?? booking.status;
-            const amount = (booking.totalAmount ?? 0) / 100;
+            // Stored in naira, not kobo — dividing by 100 showed ₦25,400 as ₦254
+            const amount = booking.totalAmount ?? 0;
             const subjectLabel =
               tab === "vehicles"
                 ? row.vehicle

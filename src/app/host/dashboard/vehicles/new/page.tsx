@@ -8,10 +8,12 @@ import Button from '@/components/general/Button';
 import { Card, CardContent } from '@/components/ui/card';
 import PillMultiSelect from '@/components/general/form/PillMultiSelect';
 import { useCreateVehicleMutation } from '@/hooks/use-host-vehicles';
+import { decodeVehicleVin, type DecodedVin } from '@/lib/api-client';
 
 const FEATURE_OPTIONS = ['AC', 'GPS', 'Child seat', 'Roof rack', 'Bluetooth', 'Backup camera', 'USB charger', 'Sunroof'];
 
 type VehicleFormValues = {
+  vin: string;
   make: string; model: string; year: string; color: string;
   fuelType: string; transmission: string; seatCapacity: string;
   dailyPrice: string; cautionDeposit: string;
@@ -27,8 +29,9 @@ export default function NewVehiclePage() {
   const router = useRouter();
   const createVehicle = useCreateVehicleMutation();
   const [error, setError] = useState<string | null>(null);
-  const { register, control, handleSubmit, watch } = useForm<VehicleFormValues>({
+  const { register, control, handleSubmit, watch, setValue } = useForm<VehicleFormValues>({
     defaultValues: {
+      vin: '',
       make: '', model: '', year: '', color: '', fuelType: 'petrol', transmission: 'manual',
       seatCapacity: '4', dailyPrice: '', cautionDeposit: '0', mileageLimitPerDay: '',
       extraMileageCharge: '', withDriverAvailable: false, driverDailyFee: '0',
@@ -39,10 +42,42 @@ export default function NewVehiclePage() {
   const withDriver = watch('withDriverAvailable');
   const hasInsurance = watch('hasInsurance');
 
+  // ── VIN prefill ──
+  const vinValue = watch('vin');
+  const [vinLoading, setVinLoading] = useState(false);
+  const [vinError, setVinError] = useState<string | null>(null);
+  const [vinDetails, setVinDetails] = useState<DecodedVin | null>(null);
+
+  const handleDecodeVin = async () => {
+    const vin = (vinValue ?? '').trim();
+    if (!vin) return;
+    setVinLoading(true);
+    setVinError(null);
+    setVinDetails(null);
+    try {
+      const decoded = await decodeVehicleVin(vin);
+      // Only fill what came back. A blank field from the decoder must not wipe
+      // something the host already typed.
+      if (decoded.make) setValue('make', decoded.make, { shouldDirty: true });
+      if (decoded.model) setValue('model', decoded.model, { shouldDirty: true });
+      if (decoded.year) setValue('year', String(decoded.year), { shouldDirty: true });
+      if (decoded.suggestedFuelType) {
+        setValue('fuelType', decoded.suggestedFuelType, { shouldDirty: true });
+      }
+      setValue('vin', decoded.vin, { shouldDirty: true });
+      setVinDetails(decoded);
+    } catch (err) {
+      setVinError(err instanceof Error ? err.message : 'Could not decode that VIN.');
+    } finally {
+      setVinLoading(false);
+    }
+  };
+
   const onSubmit = handleSubmit(async (values) => {
     try {
       setError(null);
       const result = await createVehicle.mutateAsync({
+        vin: values.vin.trim().toUpperCase() || undefined,
         make: values.make, model: values.model, year: Number(values.year),
         color: values.color, fuelType: values.fuelType as never,
         transmission: values.transmission as never,
@@ -80,6 +115,68 @@ export default function NewVehiclePage() {
           {error && <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
           <form className="grid gap-6 md:grid-cols-2" onSubmit={onSubmit}>
             {/* Basic Info */}
+            {/* VIN prefill — sits above Basic info because using it fills that
+                section in, so the order matches what the host should do. */}
+            <div className="md:col-span-2">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                Start with the VIN
+              </p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <label className="flex-1 space-y-2 text-sm">
+                    <span className="font-semibold">VIN (optional)</span>
+                    <Input
+                      placeholder="4T1BK46K59U085714"
+                      maxLength={17}
+                      autoCapitalize="characters"
+                      className="font-mono uppercase tracking-wider"
+                      {...register('vin')}
+                    />
+                  </label>
+                  <Button
+                    type="secondary"
+                    buttonType="button"
+                    className="rounded-2xl sm:w-auto"
+                    disabled={vinLoading || !(vinValue ?? '').trim()}
+                    onClick={handleDecodeVin}
+                  >
+                    {vinLoading ? 'Looking up…' : 'Look up'}
+                  </Button>
+                </div>
+
+                <p className="mt-2 text-xs text-slate-500">
+                  Fills in make, model, year and fuel type automatically. Works for most cars
+                  imported from the US — if yours isn&apos;t found, just fill the form in below.
+                </p>
+
+                {vinError && (
+                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                    {vinError}
+                  </div>
+                )}
+
+                {vinDetails && (
+                  <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+                    <p className="font-semibold text-emerald-900">
+                      {[vinDetails.year, vinDetails.make, vinDetails.model].filter(Boolean).join(' ')}
+                    </p>
+                    {/* Details we decode but have no field for — shown so the
+                        host can sanity-check that this is actually their car. */}
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-emerald-800">
+                      {vinDetails.trim && <span>Trim: {vinDetails.trim}</span>}
+                      {vinDetails.bodyClass && <span>Body: {vinDetails.bodyClass}</span>}
+                      {vinDetails.engine && <span>Engine: {vinDetails.engine}</span>}
+                      {vinDetails.driveType && <span>Drive: {vinDetails.driveType}</span>}
+                      {vinDetails.manufacturer && <span>Built by: {vinDetails.manufacturer}</span>}
+                    </div>
+                    <p className="mt-2 text-xs text-emerald-700">
+                      Check these against your vehicle and correct anything below before saving.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="md:col-span-2">
               <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Basic info</p>
               <div className="grid gap-4 md:grid-cols-3">

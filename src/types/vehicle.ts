@@ -28,6 +28,8 @@ export type VehicleCalendarBlock = {
 export type HostVehicle = {
   id: number;
   hostId: number;
+  /** Optional — set when the host prefilled the form from a VIN lookup. */
+  vin?: string | null;
   make: string;
   model: string;
   year: number;

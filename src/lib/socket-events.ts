@@ -1,6 +1,9 @@
 export const SOCKET_EVENTS = {
   BOOKING_NEW:     'booking:new',
   BOOKING_UPDATED: 'booking:updated',
+  /** To the host: a paid booking needs an answer before the window closes. */
+  BOOKING_APPROVAL_REQUIRED: 'booking:approval-required',
+  BOOKING_CHECKED_IN: 'booking:checked-in',
   BREAKFAST_REQUESTED: 'breakfast:requested',
   LISTING_UPDATED: 'listing:updated',
   HOST_UPDATED:    'host:updated',
@@ -24,3 +27,12 @@ export type ListingUpdatedPayload = { listingId: number; title: string; status: 
 export type HostUpdatedPayload    = { hostId: number; name: string; status: string };
 export type PayoutNewPayload      = { payoutId: number; hostId: number; amount: number };
 export type PayoutUpdatedPayload  = { payoutId: number; hostId: number; status: string };
+
+export type BookingApprovalRequiredPayload = {
+  bookingId: number;
+  hostId: number;
+  guestName: string;
+  stayTitle: string;
+  approvalDueAt: string;
+  kind: 'listing' | 'vehicle';
+};

@@ -4,7 +4,10 @@ import {
   approveHost,
   approveListing,
   approvePayoutRequest,
+  claimCautionDeposit,
   completeAdminBooking,
+  getCautionDeposits,
+  resolveCautionDeposit,
   getAdminAuditLogs,
   getAdminAccounts,
   getAdminBookings,
@@ -250,3 +253,40 @@ export const useAdminLogoutMutation = () =>
   useMutation({
     mutationFn: logoutAdminRequest,
   });
+
+// ── Caution deposits (escrow) ────────────────────────────────────────────────
+
+export const adminCautionDepositsQueryKey = ["admin", "cautionDeposits"];
+
+export const useCautionDepositsQuery = (status?: string) =>
+  useQuery({
+    queryKey: [...adminCautionDepositsQueryKey, status ?? "all"],
+    queryFn: () => getCautionDeposits(status),
+  });
+
+export const useClaimCautionDepositMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bookingId, reason }: { bookingId: number; reason: string }) =>
+      claimCautionDeposit(bookingId, reason),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: adminCautionDepositsQueryKey }),
+  });
+};
+
+export const useResolveCautionDepositMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      bookingId,
+      amountToHost,
+      notes,
+    }: {
+      bookingId: number;
+      amountToHost: number;
+      notes?: string;
+    }) => resolveCautionDeposit(bookingId, amountToHost, notes),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: adminCautionDepositsQueryKey }),
+  });
+};

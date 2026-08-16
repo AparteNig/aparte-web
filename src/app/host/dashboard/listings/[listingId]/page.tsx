@@ -47,7 +47,6 @@ type ListingEditFormValues = {
   postalCode: string;
   nightlyPrice: string;
   cleaningFee: string;
-  serviceFee: string;
   maxGuests: string;
   bedrooms: string;
   bathrooms: string;
@@ -73,7 +72,6 @@ const emptyListingForm: ListingEditFormValues = {
   postalCode: "",
   nightlyPrice: "",
   cleaningFee: "",
-  serviceFee: "",
   maxGuests: "",
   bedrooms: "",
   bathrooms: "",
@@ -234,7 +232,6 @@ export default function HostListingDetailPage() {
         postalCode: listing.postalCode ?? "",
         nightlyPrice: String(listing.nightlyPrice ?? ""),
         cleaningFee: String(listing.cleaningFee ?? ""),
-        serviceFee: String(listing.serviceFee ?? ""),
         maxGuests: String(listing.maxGuests ?? ""),
         bedrooms: String(listing.bedrooms ?? ""),
         bathrooms: String(listing.bathrooms ?? ""),
@@ -275,7 +272,6 @@ export default function HostListingDetailPage() {
         postalCode: values.postalCode,
         nightlyPrice: Number(values.nightlyPrice),
         cleaningFee: Number(values.cleaningFee),
-        serviceFee: Number(values.serviceFee),
         maxGuests: Number(values.maxGuests),
         bedrooms: Number(values.bedrooms),
         bathrooms: Number(values.bathrooms),
@@ -809,19 +805,20 @@ export default function HostListingDetailPage() {
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Service fee</span>
-                  <span className="font-semibold text-slate-900">
-                    {currencyFormatter.format(listing.serviceFee)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
                   <span>Caution fee</span>
                   <span className="font-semibold text-slate-900">
                     {currencyFormatter.format(listing.cautionFee ?? 0)}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                  Update fees anytime to reflect operational costs. Guests will see the total before booking.
+                  You set your nightly price and cleaning fee, and keep your cleaning fee in full.
+                  Aparte deducts its commission from the nightly total and charges guests a separate
+                  service fee.
+                </p>
+                <p className="text-xs text-slate-500">
+                  The caution fee is set by Aparte and held by us, never paid into your wallet. It
+                  returns to the guest after checkout unless you report damage and our team upholds
+                  the claim.
                 </p>
               </CardContent>
         </Card>
@@ -973,10 +970,6 @@ export default function HostListingDetailPage() {
                   <label className="space-y-2 text-sm">
                     <span className="font-semibold text-slate-800">Cleaning fee</span>
                     <Input type="number" min="0" {...register("cleaningFee", { required: true })} />
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="font-semibold text-slate-800">Service fee</span>
-                    <Input type="number" min="0" {...register("serviceFee", { required: true })} />
                   </label>
                   <label className="space-y-2 text-sm">
                     <span className="font-semibold text-slate-800">Max guests</span>

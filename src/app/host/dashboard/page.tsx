@@ -65,7 +65,16 @@ export default function HostDashboardPage() {
     const { bookings } = bookingsQuery.data;
     const completed = bookings.filter((booking) => booking.status === "completed");
     const total = completed.length;
-    const revenue = completed.reduce((sum, booking) => sum + (booking.totalAmount ?? 0), 0);
+    // What the host actually earns, not what the guest paid. totalAmount is the
+    // gross charge — it includes Aparte's service fee and the refundable caution
+    // fee, neither of which is the host's money, so summing it overstated
+    // revenue badly. Damage awards released from escrow are real earnings and
+    // sit outside the booking payout, so they are added here.
+    const revenue = completed.reduce(
+      (sum, booking) =>
+        sum + (booking.hostPayoutAmount ?? 0) + (booking.caution?.awardedToHost ?? 0),
+      0,
+    );
     const active = bookings.filter(
       (booking) =>
         booking.status === "confirmed" ||

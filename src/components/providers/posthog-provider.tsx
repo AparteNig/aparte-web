@@ -2,7 +2,7 @@
 
 import posthog from "posthog-js";
 import { PostHogProvider as PHProvider, usePostHog } from "posthog-js/react";
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 
 if (
@@ -38,7 +38,13 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <PHProvider client={posthog}>
-      <PageViewTracker />
+      {/* useSearchParams opts the subtree out of static rendering, and this
+          provider wraps every route — including /_not-found, which Next
+          prerenders at build time. Without this boundary the whole production
+          build fails. Analytics are non-blocking, so the fallback is nothing. */}
+      <Suspense fallback={null}>
+        <PageViewTracker />
+      </Suspense>
       {children}
     </PHProvider>
   );

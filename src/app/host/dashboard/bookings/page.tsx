@@ -19,6 +19,8 @@ import {
 } from "@/hooks/use-host-vehicles";
 import { cn } from "@/lib/utils";
 import type { ListingCalendarBlock, HostBooking } from "@/types/listing";
+import ApprovalQueue from "@/components/host/ApprovalQueue";
+import CheckInControl from "@/components/host/CheckInDialog";
 
 const formatDate = (date: Date) => date.toISOString().split("T")[0];
 const isDateBetween = (date: string, start: string, end: string) => {
@@ -158,6 +160,9 @@ export default function HostBookingsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Time-boxed actions sit above everything else */}
+      <ApprovalQueue />
+
       <section className="rounded-3xl border border-slate-200 bg-white p-6">
         <div className="flex flex-col gap-2 border-b border-slate-100 pb-4">
           <h2 className="text-2xl font-semibold text-slate-900">Bookings overview</h2>
@@ -295,9 +300,13 @@ export default function HostBookingsPage() {
                     {bookingsForListing.map((booking) => {
                       const amount = Number(booking.totalAmount ?? 0);
                       return (
-                        <tr key={booking.id}>
+                        <tr
+                          key={booking.id}
+                          onClick={() => router.push(`/host/dashboard/bookings/${booking.id}`)}
+                          className="cursor-pointer transition hover:bg-slate-50"
+                        >
                           <td className="py-3">
-                            <div className="font-semibold text-slate-900">
+                            <div className="font-semibold text-slate-900 hover:underline">
                               {booking.listing?.title ?? `Listing #${booking.listingId}`}
                             </div>
                             <p className="text-xs text-slate-500">
@@ -319,19 +328,41 @@ export default function HostBookingsPage() {
                                 "rounded-full px-3 py-1 text-xs font-semibold",
                                 booking.status === "confirmed"
                                   ? "bg-emerald-100 text-emerald-700"
+                                  : booking.status === "ongoing"
+                                  ? "bg-blue-100 text-blue-700"
                                   : booking.status === "pending" ||
-                                    booking.status === "pending_payment"
+                                    booking.status === "pending_payment" ||
+                                    booking.status === "awaiting_approval"
                                   ? "bg-amber-100 text-amber-700"
                                   : "bg-slate-100 text-slate-600",
                               )}
                             >
                               {booking.status === "pending_payment"
                                 ? "awaiting payment"
+                                : booking.status === "awaiting_approval"
+                                ? "needs your answer"
                                 : booking.status}
                             </span>
-                            <p className="text-xs text-slate-500">₦{amount.toLocaleString()}</p>
+                            <p className="text-xs text-slate-500">
+                              You earn ₦{(booking.hostPayoutAmount ?? 0).toLocaleString()}
+                            </p>
+                            {/* Guest paid more than this: the difference is
+                                Aparte's fee plus any refundable caution fee. */}
+                            <p className="text-[11px] text-slate-400">
+                              Guest paid ₦{amount.toLocaleString()}
+                            </p>
+                            {booking.caution?.awardedToHost ? (
+                              <p className="text-[11px] font-medium text-emerald-700">
+                                + ₦{booking.caution.awardedToHost.toLocaleString()} damage award
+                              </p>
+                            ) : null}
+                            {booking.caution && booking.caution.status === "held" ? (
+                              <p className="text-[11px] text-slate-400">
+                                ₦{booking.caution.amount.toLocaleString()} deposit held by Aparte
+                              </p>
+                            ) : null}
                           </td>
-                          <td className="py-3 text-right">
+                          <td className="py-3 text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex flex-col items-end gap-2">
                               <Button
                                 type="secondary"
@@ -342,6 +373,9 @@ export default function HostBookingsPage() {
                               >
                                 Open chat
                               </Button>
+                              {booking.status === "confirmed" && (
+                                <CheckInControl booking={booking} />
+                              )}
                               {booking.status === "confirmed" && (
                                 <button
                                   type="button"
@@ -513,7 +547,17 @@ export default function HostBookingsPage() {
                               >
                                 {booking.status.replace("_", " ")}
                               </span>
-                              <p className="mt-0.5 text-xs text-slate-500">₦{amount.toLocaleString()}</p>
+                              <p className="mt-0.5 text-xs text-slate-500">
+                                You earn ₦{(booking.hostPayoutAmount ?? 0).toLocaleString()}
+                              </p>
+                              <p className="text-[11px] text-slate-400">
+                                Guest paid ₦{amount.toLocaleString()}
+                              </p>
+                              {booking.caution?.awardedToHost ? (
+                                <p className="text-[11px] font-medium text-emerald-700">
+                                  + ₦{booking.caution.awardedToHost.toLocaleString()} damage award
+                                </p>
+                              ) : null}
                             </td>
                           </tr>
                         );

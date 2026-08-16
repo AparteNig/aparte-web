@@ -290,6 +290,30 @@ export const deleteListingExplorePost = (listingId: number, postId: number) =>
     method: "DELETE",
   });
 
+export type DecodedVin = {
+  vin: string;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  trim: string | null;
+  bodyClass: string | null;
+  engine: string | null;
+  fuelType: string | null;
+  driveType: string | null;
+  manufacturer: string | null;
+  suggestedFuelType: "petrol" | "diesel" | "electric" | "hybrid" | null;
+};
+
+/**
+ * Decodes a VIN via the backend (which proxies NHTSA's vPIC database) to
+ * prefill the add-vehicle form. Everything it returns is a suggestion the host
+ * confirms — a US dataset will not recognise every imported car.
+ */
+export const decodeVehicleVin = (vin: string) =>
+  apiFetch<{ vehicle: DecodedVin }>(
+    `/hosts/vehicles/decode-vin/${encodeURIComponent(vin)}`,
+  ).then((res) => res.vehicle);
+
 export const uploadVehicleAsset = (vehicleId: number, file: File) => {
   const formData = new FormData();
   formData.append("file", file);
@@ -406,7 +430,6 @@ export const updateHostListing = (
       | "postalCode"
       | "nightlyPrice"
       | "cleaningFee"
-      | "serviceFee"
       | "maxGuests"
       | "bedrooms"
       | "bathrooms"
@@ -487,6 +510,53 @@ export const getHostBookings = () =>
 export const completeHostBooking = (bookingId: number) =>
   apiFetch<{ booking: HostBooking }>(`/hosts/bookings/${bookingId}/complete`, {
     method: "PATCH",
+  });
+
+export type HostBookingDetail = HostBooking & {
+  vehicle?: { id: number | null; make: string; model: string; year: number } | null;
+  caution: {
+    amount: number;
+    status: "held" | "claimed" | "released" | "awarded" | "cancelled";
+    awardedToHost: number;
+    returnedToGuest: number;
+    releaseDueAt: string | null;
+    claimReason: string | null;
+  } | null;
+};
+
+export const getHostBookingDetail = (bookingId: number) =>
+  apiFetch<{ booking: HostBookingDetail }>(`/hosts/bookings/${bookingId}`, {
+    method: "GET",
+  }).then((r) => r.booking);
+
+/** Bookings paid for and waiting on this host, plus the window they have. */
+export const getBookingsAwaitingApproval = () =>
+  apiFetch<{ bookings: HostBooking[]; approvalWindowMinutes: number }>(
+    "/hosts/bookings/awaiting-approval",
+    { method: "GET" },
+  );
+
+export const acceptHostBooking = (bookingId: number) =>
+  apiFetch<{ booking: HostBooking }>(`/hosts/bookings/${bookingId}/accept`, {
+    method: "POST",
+  });
+
+/**
+ * Declining refunds the guest in full and frees the dates. `refundInitiated`
+ * comes back false when the cancellation stood but the gateway call failed —
+ * the booking is still cancelled, but an admin has to finish the refund.
+ */
+export const declineHostBooking = (bookingId: number, reason: string) =>
+  apiFetch<{ booking: HostBooking; refundInitiated: boolean }>(
+    `/hosts/bookings/${bookingId}/decline`,
+    { method: "POST", body: JSON.stringify({ reason }) },
+  );
+
+/** Redeem the guest's arrival code to start the stay. Host or admin only. */
+export const checkInBooking = (bookingId: number, code: string) =>
+  apiFetch<{ booking: HostBooking }>(`/customer/bookings/${bookingId}/checkin`, {
+    method: "POST",
+    body: JSON.stringify({ code }),
   });
 
 export type CreateCustomerBookingPayload = {
@@ -757,6 +827,56 @@ export const updateListingCautionFee = (listingId: number, cautionFee: number) =
 
 export const getAdminBookings = () =>
   adminQuery<{ bookings: AdminBookingRow[] }>("/admin/bookings").then((res) => res.bookings);
+
+// ── Caution deposits (escrow) ────────────────────────────────────────────────
+
+export type CautionDepositRow = {
+  id: number;
+  bookingId: number;
+  amount: number;
+  amountToGuest: number;
+  amountToHost: number;
+  status: "held" | "claimed" | "released" | "awarded" | "cancelled";
+  releaseDueAt: string | null;
+  claimReason: string | null;
+  claimedAt: string | null;
+  resolutionNotes: string | null;
+  resolvedAt: string | null;
+  refundReference: string | null;
+  /** Last failure from the auto-release sweep — a stuck hold shows up here. */
+  releaseError: string | null;
+  createdAt: string;
+  guestName: string | null;
+  hostId: number | null;
+  stayTitle: string | null;
+  checkoutDate: string | null;
+};
+
+export const getCautionDeposits = (status?: string) =>
+  adminQuery<{ deposits: CautionDepositRow[] }>(
+    `/admin/caution-deposits${status ? `?status=${encodeURIComponent(status)}` : ""}`,
+  ).then((res) => res.deposits);
+
+/** Suspends the auto-release clock pending a decision. */
+export const claimCautionDeposit = (bookingId: number, reason: string) =>
+  adminQuery<{ deposit: CautionDepositRow }>(`/admin/caution-deposits/${bookingId}/claim`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+
+/**
+ * The only call that can move escrow toward a host. amountToHost of 0 rejects
+ * the claim and returns the whole deposit to the guest.
+ */
+export const resolveCautionDeposit = (
+  bookingId: number,
+  amountToHost: number,
+  notes?: string,
+) =>
+  adminQuery<{ deposit: CautionDepositRow }>(`/admin/caution-deposits/${bookingId}/resolve`, {
+    method: "POST",
+    body: JSON.stringify({ amountToHost, notes }),
+  });
 
 export const updateAdminBookingStatus = (
   bookingId: number,

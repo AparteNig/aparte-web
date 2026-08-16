@@ -179,7 +179,7 @@ export default function AdminDashboardPage() {
                   .map((request) => (
                     <li key={request.id} className="rounded-2xl border border-slate-200 p-3">
                       <p className="font-semibold text-slate-900">
-                        ₦{(request.amount / 100).toLocaleString()} · Landlord #{request.hostId}
+                        ₦{request.amount.toLocaleString()} · Landlord #{request.hostId}
                       </p>
                       <p className="text-xs text-slate-500">
                         Requested {new Date(request.createdAt).toLocaleString()}

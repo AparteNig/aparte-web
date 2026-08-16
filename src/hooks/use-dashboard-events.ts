@@ -8,6 +8,7 @@ import {
   SOCKET_EVENTS,
   type BookingNewPayload,
   type BookingUpdatedPayload,
+  type BookingApprovalRequiredPayload,
   type BreakfastRequestedPayload,
   type ListingUpdatedPayload,
   type HostUpdatedPayload,
@@ -32,6 +33,18 @@ export function useDashboardEvents(entityType: "host" | "admin"): void {
         toast.success(`New booking from ${payload.guestName}`);
       } else {
         toast.success(`New booking — ${payload.listingTitle}`);
+      }
+    };
+
+    // A paid booking is now waiting on this host. Time-boxed, so it gets a
+    // louder toast than a generic update — if they miss it, it auto-confirms.
+    const onApprovalRequired = (payload: BookingApprovalRequiredPayload) => {
+      queryClient.invalidateQueries({ queryKey: hostBookingsQueryKey });
+      queryClient.invalidateQueries({ queryKey: ["admin", "bookings"] });
+      if (entityType === "host") {
+        toast.warning(`${payload.guestName} paid for ${payload.stayTitle} — needs your approval`, {
+          duration: 10000,
+        });
       }
     };
 
@@ -95,6 +108,8 @@ export function useDashboardEvents(entityType: "host" | "admin"): void {
 
     socket.on(SOCKET_EVENTS.BOOKING_NEW, onBookingNew);
     socket.on(SOCKET_EVENTS.BOOKING_UPDATED, onBookingUpdated);
+    socket.on(SOCKET_EVENTS.BOOKING_APPROVAL_REQUIRED, onApprovalRequired);
+    socket.on(SOCKET_EVENTS.BOOKING_CHECKED_IN, onBookingUpdated);
     socket.on(SOCKET_EVENTS.BREAKFAST_REQUESTED, onBreakfastRequested);
     socket.on(SOCKET_EVENTS.LISTING_UPDATED, onListingUpdated);
     socket.on(SOCKET_EVENTS.HOST_UPDATED, onHostUpdated);
@@ -104,6 +119,8 @@ export function useDashboardEvents(entityType: "host" | "admin"): void {
     return () => {
       socket.off(SOCKET_EVENTS.BOOKING_NEW, onBookingNew);
       socket.off(SOCKET_EVENTS.BOOKING_UPDATED, onBookingUpdated);
+      socket.off(SOCKET_EVENTS.BOOKING_APPROVAL_REQUIRED, onApprovalRequired);
+      socket.off(SOCKET_EVENTS.BOOKING_CHECKED_IN, onBookingUpdated);
       socket.off(SOCKET_EVENTS.BREAKFAST_REQUESTED, onBreakfastRequested);
       socket.off(SOCKET_EVENTS.LISTING_UPDATED, onListingUpdated);
       socket.off(SOCKET_EVENTS.HOST_UPDATED, onHostUpdated);
