@@ -7,7 +7,8 @@ import Button from "@/components/general/Button";
 import LoadingOverlay from "@/components/general/LoadingOverlay";
 import Modal from "@/components/general/ui/modal/Modal";
 import { Input } from "@/components/ui/input";
-import AddressAutocompleteInput from "@/components/general/form/AddressAutocompleteInput";
+import AddressPicker from "@/components/general/form/AddressPicker";
+import type { ResolvedPlace } from "@/lib/api-client";
 import PhoneInput from "@/components/general/form/PhoneInput";
 import { useUpdateHostProfileMutation, useUploadHostAvatarMutation } from "@/hooks/use-host-profile";
 import type { HostProfile } from "@/types/host";
@@ -29,6 +30,7 @@ type ProfileSetupValues = {
 };
 
 export const ProfileSetupModal = ({ open, profile }: ProfileSetupModalProps) => {
+  const [selectedPlace, setSelectedPlace] = useState<ResolvedPlace | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarTouched, setAvatarTouched] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -65,6 +67,28 @@ export const ProfileSetupModal = ({ open, profile }: ProfileSetupModalProps) => 
   const updateProfile = useUpdateHostProfileMutation();
   const uploadAvatar = useUploadHostAvatarMutation();
 
+  // Rebuild the picker from the stored profile; no googlePlaceId means the
+  // host must re-pick before the address section can be saved.
+  useEffect(() => {
+    setSelectedPlace(
+      profile?.googlePlaceId
+        ? {
+            placeId: profile.googlePlaceId,
+            formattedAddress:
+              profile.formattedAddress ??
+              [profile.addressLine1, profile.city, profile.country].filter(Boolean).join(", "),
+            latitude: null,
+            longitude: null,
+            addressLine1: profile.addressLine1 ?? "",
+            city: profile.city ?? "",
+            state: profile.state ?? "",
+            country: profile.country ?? "",
+            postalCode: profile.postalCode ?? "",
+          }
+        : null
+    );
+  }, [profile]);
+
   const onSubmit = handleSubmit(async (values) => {
     setError(null);
     setStatus("Saving profile details…");
@@ -85,13 +109,14 @@ export const ProfileSetupModal = ({ open, profile }: ProfileSetupModalProps) => 
         },
       });
       setStatus("Saving address…");
+      if (!selectedPlace) {
+        throw new Error("Please pick your address from the suggestions.");
+      }
       await updateProfile.mutateAsync({
         section: "address",
         data: {
-          addressLine1: values.addressLine1,
-          city: values.city,
-          state: values.state,
-          country: values.country,
+          // Only the place id travels; the backend derives the rest.
+          googlePlaceId: selectedPlace.placeId,
         },
       });
       if (!avatarFile && !profile?.avatarUrl) {
@@ -157,25 +182,16 @@ export const ProfileSetupModal = ({ open, profile }: ProfileSetupModalProps) => 
                 )}
               />
             </label>
-            <label className="space-y-2 md:col-span-1">
-              <span className="font-semibold">Country</span>
-              <Input {...register("country", { required: true })} />
-            </label>
-            <label className="space-y-2 md:col-span-2">
-              <span className="font-semibold">Address line 1</span>
-              <AddressAutocompleteInput
-                placeholder="1 Admiralty Way"
-                {...register("addressLine1", { required: true })}
+            {/* Country, city and state are derived from the picked place. */}
+            <div className="md:col-span-2">
+              <AddressPicker
+                label="Address"
+                required
+                placeholder="Start typing your address…"
+                value={selectedPlace}
+                onChange={setSelectedPlace}
               />
-            </label>
-            <label className="space-y-2 md:col-span-1">
-              <span className="font-semibold">City</span>
-              <Input {...register("city", { required: true })} />
-            </label>
-            <label className="space-y-2 md:col-span-1">
-              <span className="font-semibold">State</span>
-              <Input {...register("state", { required: true })} />
-            </label>
+            </div>
             <label className="space-y-2 md:col-span-2">
               <span className="font-semibold">About you</span>
               <textarea

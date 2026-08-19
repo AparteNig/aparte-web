@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Car } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import {
   useApprovalQueueQuery,
   useDeclineBookingMutation,
 } from "@/hooks/use-bookings";
+import { bookingDuration, bookingSubject, isVehicleBooking } from "@/lib/booking-display";
 import type { HostBooking } from "@/types/listing";
 
 const currency = new Intl.NumberFormat("en-NG", {
@@ -60,10 +62,8 @@ function ApprovalCard({ booking }: { booking: HostBooking }) {
   const countdown = useCountdown(booking.approvalDueAt);
 
   const busy = accept.isPending || decline.isPending;
-  const vehicleName = booking.vehicle
-    ? `${booking.vehicle.make ?? ""} ${booking.vehicle.model ?? ""}`.trim()
-    : "";
-  const what = booking.listing?.title || vehicleName || "Booking";
+  const isVehicle = isVehicleBooking(booking);
+  const what = bookingSubject(booking);
 
   const run = async (fn: () => Promise<unknown>) => {
     setError(null);
@@ -81,13 +81,15 @@ function ApprovalCard({ booking }: { booking: HostBooking }) {
           <button
             type="button"
             onClick={() => router.push(`/host/dashboard/bookings/${booking.id}`)}
-            className="text-left font-semibold text-slate-900 hover:underline"
+            className="flex items-center gap-1.5 text-left font-semibold text-slate-900 hover:underline"
           >
+            {isVehicle ? <Car className="size-4 shrink-0 text-slate-500" /> : null}
             {what}
           </button>
           <p className="text-sm text-slate-600">
             {booking.guestName} · {formatRange(booking.startDate, booking.endDate)} ·{" "}
-            {booking.nights} night{booking.nights === 1 ? "" : "s"}
+            {/* A car rental is counted in days; only a stay has nights. */}
+            {bookingDuration(booking, booking.nights)}
           </p>
         </div>
         <div className="text-right">

@@ -143,6 +143,23 @@ export default function HostSignupPage() {
             >
               {signupMutation.isPending ? "Creating account..." : "Start onboarding"}
             </Button>
+            <p className="text-center text-xs leading-5 text-slate-500">
+              By creating an account you agree to our{" "}
+              <Link
+                href="/legal/terms"
+                className="font-semibold text-primary underline underline-offset-2"
+              >
+                Terms &amp; Conditions
+              </Link>{" "}
+              and{" "}
+              <Link
+                href="/legal/privacy"
+                className="font-semibold text-primary underline underline-offset-2"
+              >
+                Privacy Policy
+              </Link>
+              .
+            </p>
           </form>
         </>
       )}

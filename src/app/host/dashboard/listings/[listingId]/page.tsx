@@ -11,7 +11,8 @@ import LoadingOverlay from "@/components/general/LoadingOverlay";
 import MediaGalleryModal from "@/components/general/MediaGalleryModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import AddressAutocompleteInput from "@/components/general/form/AddressAutocompleteInput";
+import AddressPicker from "@/components/general/form/AddressPicker";
+import type { ResolvedPlace } from "@/lib/api-client";
 import {
   hostListingQueryKey,
   useAttachListingPhotosMutation,
@@ -125,6 +126,9 @@ export default function HostListingDetailPage() {
   const attachPhotos = useAttachListingPhotosMutation(listingId);
   const deletePhotoMutation = useDeleteListingPhotoMutation(listingId);
   const [showEditForm, setShowEditForm] = useState(false);
+  // The address as a resolved Place. null means "no verified address selected",
+  // which is a different thing from "the text field is empty".
+  const [selectedPlace, setSelectedPlace] = useState<ResolvedPlace | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [mediaError, setMediaError] = useState<string | null>(null);
@@ -217,6 +221,30 @@ export default function HostListingDetailPage() {
     setActiveMediaIndex(index);
   };
 
+  // Rebuild the picker's value from what is stored. A listing saved before the
+  // picker existed has no googlePlaceId, so it hydrates with a null placeId and
+  // the host is required to re-pick before it can be saved again.
+  useEffect(() => {
+    if (!listing) return;
+    setSelectedPlace(
+      listing.googlePlaceId
+        ? {
+            placeId: listing.googlePlaceId,
+            formattedAddress:
+              listing.formattedAddress ??
+              [listing.addressLine1, listing.city, listing.country].filter(Boolean).join(", "),
+            latitude: listing.latitude,
+            longitude: listing.longitude,
+            addressLine1: listing.addressLine1,
+            city: listing.city,
+            state: listing.state ?? "",
+            country: listing.country,
+            postalCode: listing.postalCode ?? "",
+          }
+        : null
+    );
+  }, [listing]);
+
   useEffect(() => {
     if (listing) {
       reset({
@@ -224,12 +252,7 @@ export default function HostListingDetailPage() {
         category: listing.category ?? "",
         summary: listing.summary ?? "",
         description: listing.description,
-        addressLine1: listing.addressLine1,
         addressLine2: listing.addressLine2 ?? "",
-        city: listing.city,
-        state: listing.state ?? "",
-        country: listing.country,
-        postalCode: listing.postalCode ?? "",
         nightlyPrice: String(listing.nightlyPrice ?? ""),
         cleaningFee: String(listing.cleaningFee ?? ""),
         maxGuests: String(listing.maxGuests ?? ""),
@@ -264,12 +287,11 @@ export default function HostListingDetailPage() {
         category: values.category || null,
         summary: values.summary,
         description: values.description,
-        addressLine1: values.addressLine1,
         addressLine2: values.addressLine2,
-        city: values.city,
-        state: values.state,
-        country: values.country,
-        postalCode: values.postalCode,
+        // Only the place id travels. The backend re-resolves it and writes
+        // addressLine1/city/state/country/postalCode plus the coordinates, so
+        // the pin can never disagree with the address shown here.
+        ...(selectedPlace ? { googlePlaceId: selectedPlace.placeId } : {}),
         nightlyPrice: Number(values.nightlyPrice),
         cleaningFee: Number(values.cleaningFee),
         maxGuests: Number(values.maxGuests),
@@ -939,29 +961,27 @@ export default function HostListingDetailPage() {
                       {...register("description", { required: true })}
                     />
                   </label>
+                  {/*
+                    City, state, country and postal code are no longer inputs.
+                    They are derived from the picked place server-side, which is
+                    what stops a listing claiming city "Lekki" for an address on
+                    the Lagos-Ibadan expressway. Line 2 stays free text because a
+                    flat or floor number is real information Google does not have.
+                  */}
+                  <div className="md:col-span-2">
+                    <AddressPicker
+                      label="Address"
+                      required
+                      value={selectedPlace}
+                      onChange={setSelectedPlace}
+                    />
+                  </div>
                   <label className="space-y-2 text-sm">
-                    <span className="font-semibold text-slate-800">Address line 1</span>
-                    <AddressAutocompleteInput {...register("addressLine1", { required: true })} />
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="font-semibold text-slate-800">Address line 2</span>
-                    <AddressAutocompleteInput {...register("addressLine2")} />
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="font-semibold text-slate-800">City</span>
-                    <Input {...register("city", { required: true })} />
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="font-semibold text-slate-800">State</span>
-                    <Input {...register("state")} />
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="font-semibold text-slate-800">Country</span>
-                    <Input {...register("country", { required: true })} />
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="font-semibold text-slate-800">Postal code</span>
-                    <Input {...register("postalCode")} />
+                    <span className="font-semibold text-slate-800">
+                      Flat / floor / building{" "}
+                      <span className="font-normal text-slate-500">(optional)</span>
+                    </span>
+                    <Input {...register("addressLine2")} />
                   </label>
                   <label className="space-y-2 text-sm">
                     <span className="font-semibold text-slate-800">Nightly price</span>

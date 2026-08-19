@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 
 import { Input } from "@/components/ui/input";
-import AddressAutocompleteInput from "@/components/general/form/AddressAutocompleteInput";
+import AddressPicker from "@/components/general/form/AddressPicker";
+import type { ResolvedPlace } from "@/lib/api-client";
 import Button from "@/components/general/Button";
 import LoadingOverlay from "@/components/general/LoadingOverlay";
 import Modal from "@/components/general/ui/modal/Modal";
@@ -118,6 +119,7 @@ export default function HostListingsPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [listingToDelete, setListingToDelete] = useState<{ id: number; title: string } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [selectedPlace, setSelectedPlace] = useState<ResolvedPlace | null>(null);
 
   const newListingPromotionValue = watch("newListingPromotionPercent") ?? "0";
   const weeklyDiscountValue = watch("weeklyDiscountPercent") ?? "0";
@@ -138,12 +140,13 @@ export default function HostListingsPage() {
     try {
       setFormError(null);
       const formData = new FormData();
+      if (!selectedPlace) {
+        setFormError("Please pick the property address from the suggestions.");
+        return;
+      }
       const baseFields: Array<keyof ListingFormValues> = [
         "title",
         "description",
-        "addressLine1",
-        "city",
-        "country",
         "nightlyPrice",
         "maxGuests",
         "bedrooms",
@@ -152,6 +155,9 @@ export default function HostListingsPage() {
       baseFields.forEach((field) => {
         formData.append(field, String(values[field] ?? ""));
       });
+      // Only the place id travels; the backend re-resolves it and derives
+      // addressLine1, city, state, country and postal code.
+      formData.set("googlePlaceId", selectedPlace.placeId);
       if (values.category) {
         formData.append("category", values.category);
       }
@@ -167,6 +173,7 @@ export default function HostListingsPage() {
       attachments.forEach((file) => formData.append("listingFiles", file));
       await createListing.mutateAsync(formData);
       reset(initialFormValues);
+      setSelectedPlace(null);
       setAttachments([]);
       setShowCreateForm(false);
     } catch (error) {
@@ -294,26 +301,16 @@ export default function HostListingsPage() {
                     {...register("description", { required: true })}
                   />
                 </label>
-                <label className="space-y-2 text-sm">
-                  <span className="font-semibold text-slate-800">Address line 1</span>
-                  <AddressAutocompleteInput
-                    placeholder="1 Admiralty Way"
-                    {...register("addressLine1", { required: true })}
-                    onPlaceSelected={(_formatted, place) => {
-                      setValue("addressLine1", place.addressLine1);
-                      if (place.city) setValue("city", place.city);
-                      if (place.country) setValue("country", place.country);
-                    }}
+                {/* City and country are derived from the picked place server-side. */}
+                <div className="md:col-span-2">
+                  <AddressPicker
+                    label="Address"
+                    required
+                    placeholder="Start typing the property address…"
+                    value={selectedPlace}
+                    onChange={setSelectedPlace}
                   />
-                </label>
-                <label className="space-y-2 text-sm">
-                  <span className="font-semibold text-slate-800">City</span>
-                  <Input placeholder="Lagos" {...register("city", { required: true })} />
-                </label>
-                <label className="space-y-2 text-sm">
-                  <span className="font-semibold text-slate-800">Country</span>
-                  <Input placeholder="Nigeria" {...register("country", { required: true })} />
-                </label>
+                </div>
                 <label className="space-y-2 text-sm">
                   <span className="font-semibold text-slate-800">Nightly price</span>
                   <Input

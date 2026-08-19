@@ -44,6 +44,7 @@ import XIcon from "@/assets/icons/XIcon";
 import TikTokIcon from "@/assets/icons/TikTok";
 import CaretRight from "@/assets/icons/CaretRight";
 import { showToast } from "@/components/general/ui/CustomToast";
+import { COMPANY } from "@/lib/company";
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
@@ -926,10 +927,35 @@ export default function Home() {
           </div>
           <div className="space-y-3 text-xs text-slate-500">
             <p className="text-sm font-semibold text-slate-700">Support</p>
-            <p>Contact us</p>
-            <p>FAQs</p>
-            <p>Help Center</p>
-            <p>Live chat</p>
+            <p>
+              <a
+                href={`mailto:${COMPANY.emails.support}`}
+                className="transition-colors hover:text-primary"
+              >
+                Contact us
+              </a>
+            </p>
+            <p>
+              <a href="#faq" className="transition-colors hover:text-primary">
+                FAQs
+              </a>
+            </p>
+            <p>
+              <Link
+                href="/legal/privacy"
+                className="transition-colors hover:text-primary"
+              >
+                Privacy Policy
+              </Link>
+            </p>
+            <p>
+              <Link
+                href="/legal/terms"
+                className="transition-colors hover:text-primary"
+              >
+                Terms &amp; Conditions
+              </Link>
+            </p>
           </div>
           <div className="space-y-3 text-xs text-slate-500">
             <p className="text-sm font-semibold text-slate-700">Contact</p>
@@ -938,11 +964,22 @@ export default function Home() {
             <p>Email address</p>
           </div>
         </div>
-        <p
-          className={`${inriaSerif.className} mt-1 py-4 text-center text-[16px] text-[#343434]`}
+        <div
+          className={`${inriaSerif.className} mt-1 flex flex-col items-center gap-2 py-4 text-[16px] text-[#343434] md:flex-row md:justify-center md:gap-4`}
         >
-          Aparte@2026. All rights reserved.
-        </p>
+          <p>Aparte@2026. All rights reserved.</p>
+          <span aria-hidden className="hidden text-[#B5B5B5] md:inline">
+            |
+          </span>
+          <div className="flex items-center gap-4 text-[14px]">
+            <Link href="/legal/privacy" className="hover:text-primary">
+              Privacy Policy
+            </Link>
+            <Link href="/legal/terms" className="hover:text-primary">
+              Terms &amp; Conditions
+            </Link>
+          </div>
+        </div>
       </footer>
     </div>
   );

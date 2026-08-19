@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useAdminVehicleQuery, useReviewVehicleMutation, useSuspendVehicleMutation, useUnsuspendVehicleMutation, useEditAdminVehicleMutation } from '@/hooks/admin/use-admin-vehicles';
+import { useAdminVehicleQuery, useReviewVehicleMutation, useSuspendVehicleMutation, useUnsuspendVehicleMutation, useEditAdminVehicleMutation, useSetVehiclePremiumMutation } from '@/hooks/admin/use-admin-vehicles';
 import Button from '@/components/general/Button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,8 +17,10 @@ export default function AdminVehicleDetailPage() {
   const suspendVehicle = useSuspendVehicleMutation();
   const unsuspendVehicle = useUnsuspendVehicleMutation();
   const editVehicle = useEditAdminVehicleMutation();
+  const setPremium = useSetVehiclePremiumMutation();
 
   const [reviewNotes, setReviewNotes] = useState('');
+  const [premiumNotes, setPremiumNotes] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [editDraft, setEditDraft] = useState<{ dailyPrice: string; cautionDeposit: string; driverDailyFee: string; conditionNotes: string; reviewNotes: string }>({ dailyPrice: '', cautionDeposit: '', driverDailyFee: '', conditionNotes: '', reviewNotes: '' });
 
@@ -65,9 +67,90 @@ export default function AdminVehicleDetailPage() {
           })}>
             {vehicle.status.replace('_', ' ')}
           </span>
+          {vehicle.isPremium && (
+            <span className="mt-1 ml-2 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+              ★ Premium
+            </span>
+          )}
         </div>
         <Button type="secondary" className="rounded-2xl" onClick={startEdit}>Edit fields</Button>
       </div>
+
+      {/* Premium — the editorial gate for the explore video feed. Kept in its
+          own panel rather than mixed into Actions, because it is a different
+          decision from the compliance review above it. */}
+      <Card className={cn('border-slate-200', vehicle.isPremium && 'border-amber-300 bg-amber-50/40')}>
+        <CardHeader>
+          <CardTitle className="text-base">Explore feed — Premium</CardTitle>
+          <p className="text-sm text-slate-500">
+            Only Premium vehicles appear in the Explore video feed, and only Premium hosts can
+            upload clips. Publishing is about compliance; Premium is about whether this car
+            belongs in a curated feed.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!isPublished && !vehicle.isPremium ? (
+            <p className="text-sm text-slate-500">
+              This vehicle must be published before it can be granted Premium.
+            </p>
+          ) : vehicle.isPremium ? (
+            <>
+              <p className="text-sm text-slate-600">
+                Granted
+                {vehicle.premiumApprovedAt
+                  ? ` on ${new Date(vehicle.premiumApprovedAt).toLocaleDateString()}`
+                  : ''}
+                . {vehicle.explorePosts?.length ?? 0} clip
+                {(vehicle.explorePosts?.length ?? 0) === 1 ? '' : 's'} uploaded.
+              </p>
+              {vehicle.premiumNotes && (
+                <p className="text-sm text-slate-500 italic">{vehicle.premiumNotes}</p>
+              )}
+              <Button
+                type="secondary"
+                className="rounded-2xl text-rose-600"
+                disabled={setPremium.isPending}
+                onClick={() => setPremium.mutate({ vehicleId, isPremium: false })}
+              >
+                {setPremium.isPending ? 'Revoking…' : 'Revoke Premium'}
+              </Button>
+              {/* Says what revoking does and does not destroy, so the admin is
+                  not guessing whether it is safe to undo. */}
+              <p className="text-xs text-slate-400">
+                Removes it from the feed immediately. Existing clips are kept, so this can be
+                reversed without the host re-uploading.
+              </p>
+            </>
+          ) : (
+            <>
+              <label className="block space-y-2 text-sm">
+                <span className="font-semibold">Why is this car Premium? (optional)</span>
+                <textarea
+                  className="w-full rounded-2xl border border-slate-200 p-3 text-sm"
+                  rows={2}
+                  value={premiumNotes}
+                  onChange={(e) => setPremiumNotes(e.target.value)}
+                  placeholder="e.g. high-end SUV, excellent condition"
+                />
+              </label>
+              <Button
+                type="primary"
+                className="rounded-2xl"
+                disabled={setPremium.isPending}
+                onClick={() =>
+                  setPremium.mutate({
+                    vehicleId,
+                    isPremium: true,
+                    notes: premiumNotes.trim() || undefined,
+                  })
+                }
+              >
+                {setPremium.isPending ? 'Granting…' : 'Grant Premium'}
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Action panel */}
       <Card className="border-slate-200">

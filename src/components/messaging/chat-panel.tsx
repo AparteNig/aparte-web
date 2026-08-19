@@ -8,10 +8,12 @@ import {
   useState
 } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Car, Home } from "lucide-react";
 
 import Button from "@/components/general/Button";
 import { Input } from "@/components/ui/input";
 import { getIdentityFromToken } from "@/lib/token-utils";
+import { bookingLocation, bookingSubject, isVehicleBooking } from "@/lib/booking-display";
 import {
   useConversationSocketContext,
   type MessageNew
@@ -47,6 +49,10 @@ type ConversationSummary = {
   listingTitle?: string | null;
   listingCity?: string | null;
   listingCountry?: string | null;
+  // Populated instead of listingTitle when the thread belongs to a car rental.
+  vehicleMake?: string | null;
+  vehicleModel?: string | null;
+  vehicleYear?: number | null;
   hostName?: string | null;
   hostDisplayName?: string | null;
   hostEmail?: string | null;
@@ -143,10 +149,40 @@ type BookingOption = {
   guestName: string | null;
   startDate: string;
   endDate: string;
-  listing: { title: string; city: string; country: string };
+  vehicleId?: number | null;
+  // Exactly one of these is populated — a booking is a stay or a car rental.
+  // Declaring `listing` as always present is what crashed this list on the
+  // first vehicle booking to come back from the API.
+  listing?: { title: string; city: string; country: string } | null;
+  vehicle?: {
+    make: string | null;
+    model: string | null;
+    year: number | null;
+    pickupCity: string | null;
+    pickupCountry: string | null;
+  } | null;
 };
 
 const MESSAGEABLE_STATUSES = new Set(["confirmed", "ongoing", "checkout_due", "guest_departed"]);
+
+/**
+ * What a thread is about. A conversation hangs off a booking that is either a
+ * stay or a car rental, so naming it from `listingTitle` alone labelled every
+ * rental thread "Direct message".
+ */
+const conversationSubject = (conversation: {
+  listingTitle?: string | null;
+  vehicleMake?: string | null;
+  vehicleModel?: string | null;
+  vehicleYear?: number | null;
+}) => {
+  if (conversation.listingTitle) return conversation.listingTitle;
+  const vehicle = [conversation.vehicleYear, conversation.vehicleMake, conversation.vehicleModel]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  return vehicle || "Direct message";
+};
 
 type ApiMessage = {
   id: number;
@@ -636,7 +672,7 @@ export default function ChatPanel({
                     // The property is what a host recognises a thread by — it
                     // leads. The booking number is an internal reference and is
                     // demoted to a chip; it used to be the boldest thing here.
-                    const property = conversation.listingTitle ?? "Direct message";
+                    const property = conversationSubject(conversation);
                     const counterpart = resolveCounterpart(conversation, entityType);
                     const stay = formatStayRange(
                       conversation.bookingStartDate,
@@ -765,10 +801,11 @@ export default function ChatPanel({
                     <div className="space-y-1.5">
                       {bookingsQuery.data.map((booking) => {
                         const dateRange = `${new Date(booking.startDate).toLocaleDateString()} – ${new Date(booking.endDate).toLocaleDateString()}`;
-                        const label = booking.listing.title;
+                        const label = bookingSubject(booking);
+                        const isVehicle = isVehicleBooking(booking);
                         const sub = booking.guestName
-                          ? `Guest: ${booking.guestName}`
-                          : `${booking.listing.city}`;
+                          ? `${isVehicle ? "Renter" : "Guest"}: ${booking.guestName}`
+                          : bookingLocation(booking);
                         const isPending = openByBookingMutation.isPending && bookingId === String(booking.id);
                         return (
                           <button
@@ -782,7 +819,14 @@ export default function ChatPanel({
                             className="w-full rounded-2xl border border-emerald-100 bg-white p-3 text-left text-sm transition hover:border-emerald-300 hover:shadow-sm disabled:opacity-60"
                           >
                             <div className="flex items-center justify-between gap-2">
-                              <p className="font-medium text-slate-800 truncate">{label}</p>
+                              <p className="flex min-w-0 items-center gap-1.5 font-medium text-slate-800">
+                                {isVehicle ? (
+                                  <Car className="size-3.5 shrink-0 text-slate-500" />
+                                ) : (
+                                  <Home className="size-3.5 shrink-0 text-slate-500" />
+                                )}
+                                <span className="truncate">{label}</span>
+                              </p>
                               <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
                                 {booking.status.replace("_", " ")}
                               </span>
@@ -858,7 +902,9 @@ export default function ChatPanel({
                     )}
                     <div className="min-w-0">
                       <p className="truncate font-semibold tracking-[-0.01em] text-slate-900">
-                        {activeConversation?.listingTitle ?? "Direct message"}
+                        {activeConversation
+                          ? conversationSubject(activeConversation)
+                          : "Direct message"}
                       </p>
                       <p className="truncate text-[13px] text-slate-600">
                         {activeCounterpart.name ?? activeCounterpart.role}

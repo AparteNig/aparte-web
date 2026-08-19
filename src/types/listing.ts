@@ -56,8 +56,15 @@ export type HostListing = {
   state: string;
   country: string;
   postalCode: string;
-  latitude: string;
-  longitude: string;
+  // Numeric since the coordinate columns became numeric(10,7); null when the
+  // listing has no resolved place yet. Never '' — an empty string was never a
+  // coordinate.
+  latitude: number | null;
+  longitude: number | null;
+  /** Stable Places identifier; null on listings predating the address picker. */
+  googlePlaceId: string | null;
+  /** Google's canonical one-line address, for display. */
+  formattedAddress: string | null;
   nightlyPrice: number;
   currency: string;
   cleaningFee: number;
@@ -126,6 +133,14 @@ export type HostBooking = {
   hasCheckInCode: boolean;
   checkedInAt: string | null;
   checkedInByType: "host" | "admin" | null;
+  /**
+   * Departure code — same asymmetry as the arrival code. The host learns only
+   * that one is outstanding; a host who could read it could mark a guest gone
+   * without them ever being there.
+   */
+  hasCheckOutCode: boolean;
+  checkedOutAt: string | null;
+  checkedOutByType: "host" | "admin" | null;
   /** What the host actually earns on this booking, after commission. */
   hostCommission: number;
   hostPayoutAmount: number;

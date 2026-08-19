@@ -559,6 +559,16 @@ export const checkInBooking = (bookingId: number, code: string) =>
     body: JSON.stringify({ code }),
   });
 
+/**
+ * Ends the stay by redeeming the guest's departure code. Single-use and
+ * distinct from the arrival code.
+ */
+export const checkOutBooking = (bookingId: number, code: string) =>
+  apiFetch<{ booking: HostBooking }>(`/customer/bookings/${bookingId}/guest-checkout`, {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+
 export type CreateCustomerBookingPayload = {
   listingId: number;
   guestName: string;
@@ -973,3 +983,59 @@ export const editAdminVehicle = (vehicleId: number, payload: Partial<HostVehicle
     method: "PATCH",
     body: JSON.stringify(payload),
   });
+
+/**
+ * Premium is the editorial tier that admits a car to the explore video feed.
+ * Separate from `status`: publishing is a compliance decision, Premium is a
+ * taste decision. Granting requires the vehicle to be published.
+ */
+export const setAdminVehiclePremium = (
+  vehicleId: number,
+  isPremium: boolean,
+  notes?: string,
+) =>
+  adminQuery<{ vehicle: HostVehicle; isPremium: boolean }>(
+    `/admin/vehicles/${vehicleId}/premium`,
+    { method: "PATCH", body: JSON.stringify({ isPremium, notes }) },
+  );
+
+// ── Address lookup ─────────────────────────────────────────────────────────
+// Both calls go through our backend rather than to Google directly. That is
+// what keeps the Maps server key out of this bundle, biases results to Nigeria
+// in one place, and lets Place Details be cached.
+
+export type PlaceSuggestion = {
+  placeId: string;
+  text: string;
+  mainText: string;
+  secondaryText: string;
+};
+
+export type ResolvedPlace = {
+  placeId: string;
+  formattedAddress: string;
+  latitude: number | null;
+  longitude: number | null;
+  addressLine1: string;
+  city: string;
+  state: string;
+  country: string;
+  postalCode: string;
+};
+
+/**
+ * `sessionToken` must be the same value for every keystroke of one address
+ * entry, and must then be passed to `fetchPlaceDetails`. That is what makes
+ * Google bill the entry as a single session instead of per request.
+ */
+export const fetchPlaceSuggestions = (query: string, sessionToken: string) =>
+  apiFetch<{ suggestions: PlaceSuggestion[] }>(
+    `/places/autocomplete?q=${encodeURIComponent(query)}&sessionToken=${encodeURIComponent(sessionToken)}`,
+    { auth: true, authCookie: "host" }
+  );
+
+export const fetchPlaceDetails = (placeId: string, sessionToken: string) =>
+  apiFetch<{ place: ResolvedPlace }>(
+    `/places/${encodeURIComponent(placeId)}?sessionToken=${encodeURIComponent(sessionToken)}`,
+    { auth: true, authCookie: "host" }
+  );

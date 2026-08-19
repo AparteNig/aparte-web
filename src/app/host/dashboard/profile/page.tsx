@@ -40,12 +40,16 @@ const PROFILE_SECTIONS: HostSectionConfig[] = [
     description: "Confirm the address you operate from.",
     stepKey: "ADDRESS_VERIFIED",
     fields: [
-      { name: "addressLine1", label: "Address line 1", required: true },
-      { name: "addressLine2", label: "Address line 2 (optional)" },
-      { name: "city", label: "City", required: true },
-      { name: "state", label: "State / Region" },
-      { name: "country", label: "Country", required: true },
-      { name: "postalCode", label: "Postal code" },
+      // One picker replaces the six free-text fields. City, state, country and
+      // postal code are derived from the chosen place server-side.
+      {
+        name: "addressLine1",
+        label: "Address",
+        type: "place",
+        required: true,
+        placeholder: "Start typing your address…",
+      },
+      { name: "addressLine2", label: "Flat / floor / building (optional)" },
     ],
   },
   {

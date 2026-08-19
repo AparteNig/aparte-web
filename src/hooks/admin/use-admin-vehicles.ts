@@ -6,6 +6,7 @@ import {
   getAdminVehicleDetail,
   getAdminVehicles,
   reviewAdminVehicle,
+  setAdminVehiclePremium,
   suspendAdminVehicle,
   unsuspendAdminVehicle,
 } from '@/lib/api-client';
@@ -71,6 +72,26 @@ export const useEditAdminVehicleMutation = () => {
   return useMutation({
     mutationFn: ({ vehicleId, payload }: { vehicleId: number; payload: Partial<HostVehicle> }) =>
       editAdminVehicle(vehicleId, payload),
+    onSuccess: (_, { vehicleId }) => {
+      qc.invalidateQueries({ queryKey: adminVehiclesQueryKey });
+      qc.invalidateQueries({ queryKey: adminVehicleQueryKey(vehicleId) });
+    },
+  });
+};
+
+/** Grant or revoke the editorial Premium tier that gates the explore feed. */
+export const useSetVehiclePremiumMutation = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      vehicleId,
+      isPremium,
+      notes,
+    }: {
+      vehicleId: number;
+      isPremium: boolean;
+      notes?: string;
+    }) => setAdminVehiclePremium(vehicleId, isPremium, notes),
     onSuccess: (_, { vehicleId }) => {
       qc.invalidateQueries({ queryKey: adminVehiclesQueryKey });
       qc.invalidateQueries({ queryKey: adminVehicleQueryKey(vehicleId) });

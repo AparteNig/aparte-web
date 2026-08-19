@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
@@ -21,6 +21,9 @@ import { cn } from "@/lib/utils";
 import type { ListingCalendarBlock, HostBooking } from "@/types/listing";
 import ApprovalQueue from "@/components/host/ApprovalQueue";
 import CheckInControl from "@/components/host/CheckInDialog";
+import CheckOutControl from "@/components/host/CheckOutDialog";
+import { Car } from "lucide-react";
+import { bookingSubject } from "@/lib/booking-display";
 
 const formatDate = (date: Date) => date.toISOString().split("T")[0];
 const isDateBetween = (date: string, start: string, end: string) => {
@@ -71,16 +74,16 @@ export default function HostBookingsPage() {
   const addBlock = useAddVehicleCalendarBlockMutation(selectedVehicleId);
   const deleteBlock = useDeleteVehicleCalendarBlockMutation(selectedVehicleId);
 
-  useEffect(() => {
-    if (!selectedVehicleId && hostVehicles.length > 0) {
-      setSelectedVehicleId(hostVehicles[0].id);
-    }
-  }, [hostVehicles, selectedVehicleId]);
-
   const vehicleCalendarBlocks = selectedVehicle?.calendarBlocks ?? [];
 
+  // No vehicle selected means "all of them". Auto-selecting the first car
+  // instead would hide every other car's rentals behind a dropdown the host
+  // has no reason to touch.
   const vehicleBookingsForSelected = useMemo(
-    () => vehicleBookings.filter((b) => b.vehicleId === selectedVehicleId),
+    () =>
+      selectedVehicleId
+        ? vehicleBookings.filter((b) => b.vehicleId === selectedVehicleId)
+        : vehicleBookings,
     [vehicleBookings, selectedVehicleId],
   );
 
@@ -376,6 +379,7 @@ export default function HostBookingsPage() {
                               {booking.status === "confirmed" && (
                                 <CheckInControl booking={booking} />
                               )}
+                              <CheckOutControl booking={booking} />
                               {booking.status === "confirmed" && (
                                 <button
                                   type="button"
@@ -492,11 +496,15 @@ export default function HostBookingsPage() {
                   <select
                     className="mt-2 w-full rounded-2xl border border-slate-200 p-3 text-sm"
                     value={selectedVehicleId ?? ""}
-                    onChange={(e) => setSelectedVehicleId(Number(e.target.value))}
+                    onChange={(e) =>
+                      setSelectedVehicleId(e.target.value ? Number(e.target.value) : undefined)
+                    }
                   >
+                    <option value="">All vehicles ({vehicleBookings.length})</option>
                     {hostVehicles.map((v) => (
                       <option key={v.id} value={v.id}>
-                        {v.year} {v.make} {v.model}
+                        {v.year} {v.make} {v.model} (
+                        {vehicleBookings.filter((b) => b.vehicleId === v.id).length})
                       </option>
                     ))}
                   </select>
@@ -505,7 +513,11 @@ export default function HostBookingsPage() {
               {vehicleBookingsQuery.isLoading ? (
                 <p className="text-sm text-slate-500">Loading rentals...</p>
               ) : vehicleBookingsForSelected.length === 0 ? (
-                <p className="text-sm text-slate-500">No rentals for this vehicle yet.</p>
+                <p className="text-sm text-slate-500">
+                  {selectedVehicleId
+                    ? "No rentals for this vehicle yet."
+                    : "No car rentals yet."}
+                </p>
               ) : (
                 <div className="overflow-auto">
                   <table className="w-full text-left text-sm text-slate-600">
@@ -515,6 +527,7 @@ export default function HostBookingsPage() {
                         <th className="pb-2">Dates</th>
                         <th className="pb-2">Days</th>
                         <th className="pb-2">Status</th>
+                        <th className="pb-2 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -524,9 +537,15 @@ export default function HostBookingsPage() {
                           <tr key={booking.id}>
                             <td className="py-3">
                               <div className="font-semibold text-slate-900">{booking.guestName}</div>
+                              {/* Which car this is for — the whole table used to
+                                  omit it, so an "all vehicles" view was unreadable. */}
+                              <p className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                                <Car className="size-3 shrink-0 text-slate-400" />
+                                {bookingSubject(booking)}
+                              </p>
                               <p className="text-xs text-slate-500">
                                 {booking.guestEmail || booking.guestPhone || "—"}
-                                {booking.withDriver && " · With driver"}
+                                {booking.withDriver ? " · With driver" : " · Self-drive"}
                               </p>
                             </td>
                             <td className="py-3 text-xs">
@@ -559,6 +578,47 @@ export default function HostBookingsPage() {
                                 </p>
                               ) : null}
                             </td>
+                            {/* A rental needs the same handover controls a stay
+                                has: without these the host can see a paid car
+                                booking but cannot start or finish it. */}
+                            <td className="py-3 text-right">
+                              <div className="flex flex-col items-end gap-2">
+                                <Button
+                                  type="secondary"
+                                  className="rounded-2xl px-4 py-1 text-xs"
+                                  onClick={() =>
+                                    router.push(`/host/dashboard/bookings/${booking.id}`)
+                                  }
+                                >
+                                  View details
+                                </Button>
+                                <Button
+                                  type="secondary"
+                                  className="rounded-2xl px-4 py-1 text-xs"
+                                  onClick={() =>
+                                    router.push(
+                                      `/host/dashboard/messages?bookingId=${booking.id}`,
+                                    )
+                                  }
+                                >
+                                  Open chat
+                                </Button>
+                                {booking.status === "confirmed" && (
+                                  <CheckInControl booking={booking} />
+                                )}
+                                <CheckOutControl booking={booking} />
+                                {booking.status === "confirmed" && (
+                                  <button
+                                    type="button"
+                                    className="text-sm font-semibold text-primary hover:underline disabled:opacity-50"
+                                    disabled={completeBooking.isPending}
+                                    onClick={() => completeBooking.mutate(booking.id)}
+                                  >
+                                    Mark completed
+                                  </button>
+                                )}
+                              </div>
+                            </td>
                           </tr>
                         );
                       })}
@@ -576,6 +636,32 @@ export default function HostBookingsPage() {
                 <p className="text-sm text-slate-500">Green = rented · Red = blocked</p>
               </CardHeader>
               <CardContent className="space-y-3">
+                {/* A calendar can only describe one vehicle, so when the table
+                    is showing all of them this asks for a choice rather than
+                    silently rendering the first car's availability. */}
+                {!selectedVehicleId ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                    <p className="text-sm font-medium text-slate-700">Pick a vehicle</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Choose one above to see and manage its availability.
+                    </p>
+                    {hostVehicles.length > 0 && (
+                      <div className="mt-3 flex flex-wrap justify-center gap-2">
+                        {hostVehicles.slice(0, 4).map((v) => (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() => setSelectedVehicleId(v.id)}
+                            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-primary hover:text-primary"
+                          >
+                            {v.make} {v.model}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                <>
                 <label className="block text-xs font-semibold uppercase text-slate-500">
                   Month
                   <Input
@@ -615,6 +701,8 @@ export default function HostBookingsPage() {
                     })}
                   </div>
                 </div>
+                </>
+                )}
               </CardContent>
             </Card>
 
@@ -642,6 +730,12 @@ export default function HostBookingsPage() {
                 >
                   {addBlock.isPending ? "Blocking…" : "Block dates"}
                 </Button>
+                {/* Says why the button is dead rather than leaving the host to guess. */}
+                {!selectedVehicleId && (
+                  <p className="text-xs text-slate-500">
+                    Pick a vehicle above to block dates on it.
+                  </p>
+                )}
 
                 {vehicleCalendarBlocks.filter((b) => !b.reason?.toLowerCase().startsWith("rented")).length > 0 && (
                   <div className="mt-2 space-y-2 border-t border-slate-100 pt-3">

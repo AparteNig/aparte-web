@@ -56,10 +56,19 @@ export type HostVehicle = {
   status: VehicleStatus;
   reviewNotes: string;
   publishedAt: string | null;
+  /**
+   * Editorial tier granted by an admin — the gate for the explore video feed.
+   * Distinct from `status`: publishing is a compliance decision, Premium is a
+   * judgement about whether the car belongs in a curated feed.
+   */
+  isPremium: boolean;
+  premiumApprovedAt: string | null;
+  premiumNotes: string;
   createdAt: string;
   updatedAt: string;
   photos: VehiclePhoto[];
   calendarBlocks?: VehicleCalendarBlock[];
+  explorePosts?: Array<{ id: number; url: string; sortOrder: number }>;
 };
 
 export type AdminVehicleRow = {

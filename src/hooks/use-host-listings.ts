@@ -96,12 +96,12 @@ export const useUpdateListingMutation = (listingId?: number) => {
           | "category"
           | "summary"
           | "description"
-          | "addressLine1"
           | "addressLine2"
-          | "city"
-          | "state"
-          | "country"
-          | "postalCode"
+          // addressLine1, city, state, country and postalCode are deliberately
+          // absent: the backend derives them from googlePlaceId and ignores
+          // them if sent. Listing them here would advertise a write that
+          // silently does nothing.
+          | "googlePlaceId"
           | "nightlyPrice"
           | "cleaningFee"
           | "maxGuests"

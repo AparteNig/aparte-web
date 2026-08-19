@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   acceptHostBooking,
   checkInBooking,
+  checkOutBooking,
   completeHostBooking,
   declineHostBooking,
   getBookingsAwaitingApproval,
@@ -82,6 +83,16 @@ export const useCheckInBookingMutation = () => {
   return useMutation({
     mutationFn: ({ bookingId, code }: { bookingId: number; code: string }) =>
       checkInBooking(bookingId, code),
+    onSuccess: () => invalidateBookingQueries(queryClient),
+  });
+};
+
+/** Ends a stay by redeeming the guest's departure code. */
+export const useCheckOutBookingMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bookingId, code }: { bookingId: number; code: string }) =>
+      checkOutBooking(bookingId, code),
     onSuccess: () => invalidateBookingQueries(queryClient),
   });
 };

@@ -1,15 +1,27 @@
 "use client";
 
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { Car } from "lucide-react";
 
 import Button from "@/components/general/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import CheckInControl from "@/components/host/CheckInDialog";
+import CheckOutControl from "@/components/host/CheckOutDialog";
 import {
   useAcceptBookingMutation,
   useCompleteBookingMutation,
+  useDeclineBookingMutation,
   useHostBookingQuery,
 } from "@/hooks/use-bookings";
+import {
+  bookingCopy,
+  bookingDuration,
+  bookingLocation,
+  bookingSubject,
+  isVehicleBooking,
+} from "@/lib/booking-display";
 import { cn } from "@/lib/utils";
 
 const naira = (n: number | null | undefined) => `₦${(n ?? 0).toLocaleString("en-NG")}`;
@@ -62,7 +74,11 @@ export default function HostBookingDetailPage() {
 
   const { data: booking, isLoading, isError, error } = useHostBookingQuery(bookingId);
   const accept = useAcceptBookingMutation();
+  const decline = useDeclineBookingMutation();
   const complete = useCompleteBookingMutation();
+  const [declining, setDeclining] = useState(false);
+  const [declineReason, setDeclineReason] = useState("");
+  const [approvalError, setApprovalError] = useState<string | null>(null);
 
   if (isLoading) {
     return <p className="p-6 text-sm text-slate-500">Loading booking…</p>;
@@ -81,9 +97,9 @@ export default function HostBookingDetailPage() {
     );
   }
 
-  const subject =
-    booking.listing?.title ??
-    (booking.vehicle ? `${booking.vehicle.year} ${booking.vehicle.make} ${booking.vehicle.model}` : "Booking");
+  const subject = bookingSubject(booking);
+  const isVehicle = isVehicleBooking(booking);
+  const copy = bookingCopy(booking);
 
   // Damage awards are earnings that sit outside the booking payout
   const totalEarned = (booking.hostPayoutAmount ?? 0) + (booking.caution?.awardedToHost ?? 0);
@@ -115,14 +131,98 @@ export default function HostBookingDetailPage() {
       {/* Time-sensitive action first */}
       {booking.status === "awaiting_approval" && (
         <Card className="border-amber-300 bg-amber-50/60">
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
-            <p className="text-sm text-slate-700">
-              This guest has paid and is waiting on you. It confirms automatically if you
-              don&apos;t respond.
-            </p>
-            <Button disabled={accept.isPending} onClick={() => accept.mutate(booking.id)}>
-              {accept.isPending ? "Accepting…" : "Accept booking"}
-            </Button>
+          <CardContent className="space-y-3 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-slate-700">
+                This guest has paid and is waiting on you. It confirms automatically if you
+                don&apos;t respond.
+              </p>
+              {!declining && (
+                <div className="flex gap-2">
+                  {/* Declining is the host's only exit from a paid booking, so it
+                      has to be reachable from the page they land on — not only
+                      from the queue on the bookings index. */}
+                  <Button
+                    type="secondary"
+                    disabled={accept.isPending}
+                    onClick={() => {
+                      setApprovalError(null);
+                      setDeclining(true);
+                    }}
+                  >
+                    Decline
+                  </Button>
+                  <Button
+                    disabled={accept.isPending}
+                    onClick={async () => {
+                      setApprovalError(null);
+                      try {
+                        await accept.mutateAsync(booking.id);
+                      } catch (e) {
+                        setApprovalError(
+                          e instanceof Error ? e.message : "Could not accept, please retry.",
+                        );
+                      }
+                    }}
+                  >
+                    {accept.isPending ? "Accepting…" : "Accept booking"}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {declining && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">
+                  Why can&apos;t you take this booking?
+                  <Input
+                    autoFocus
+                    value={declineReason}
+                    onChange={(e) => setDeclineReason(e.target.value)}
+                    placeholder={copy.declinePlaceholder}
+                    className="mt-1"
+                  />
+                </label>
+                <p className="text-xs text-slate-500">
+                  The guest sees this, so keep it factual. Declining refunds them in full and
+                  frees the dates.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    type="secondary"
+                    disabled={decline.isPending}
+                    onClick={() => {
+                      setDeclining(false);
+                      setDeclineReason("");
+                    }}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    disabled={decline.isPending || !declineReason.trim()}
+                    onClick={async () => {
+                      setApprovalError(null);
+                      try {
+                        await decline.mutateAsync({
+                          bookingId: booking.id,
+                          reason: declineReason.trim(),
+                        });
+                        setDeclining(false);
+                        setDeclineReason("");
+                      } catch (e) {
+                        setApprovalError(
+                          e instanceof Error ? e.message : "Could not decline, please retry.",
+                        );
+                      }
+                    }}
+                  >
+                    {decline.isPending ? "Declining…" : "Confirm decline"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {approvalError && <p className="text-sm text-rose-600">{approvalError}</p>}
           </CardContent>
         </Card>
       )}
@@ -130,19 +230,37 @@ export default function HostBookingDetailPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Stay</CardTitle>
+            {/* A car rental is not a stay — same record, different vocabulary. */}
+            <CardTitle className="flex items-center gap-2">
+              {isVehicle ? <Car className="size-4 text-slate-500" /> : null}
+              {copy.Noun}
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <Row label="Check-in" value={formatDate(booking.startDate)} />
-            <Row label="Check-out" value={formatDate(booking.endDate)} />
-            <Row label="Nights" value={booking.nights} />
+            <Row label={copy.startLabel} value={formatDate(booking.startDate)} />
+            <Row label={copy.endLabel} value={formatDate(booking.endDate)} />
+            <Row
+              label={isVehicle ? "Days" : "Nights"}
+              value={bookingDuration(booking, booking.nights)}
+            />
             {booking.listing && (
               <Row
                 label="Location"
                 value={[booking.listing.city, booking.listing.country].filter(Boolean).join(", ")}
               />
             )}
-            {booking.vehicle && <Row label="With driver" value={booking.withDriver ? "Yes" : "No"} />}
+            {booking.vehicle && (
+              <>
+                <Row label="Vehicle" value={bookingSubject(booking)} />
+                {bookingLocation(booking) && (
+                  <Row label={copy.locationLabel} value={bookingLocation(booking)} />
+                )}
+                <Row
+                  label="Mode"
+                  value={booking.withDriver ? "With driver" : "Self-drive"}
+                />
+              </>
+            )}
             <Row label="Booked on" value={formatDateTime(booking.createdAt)} />
             {booking.notes ? <Row label="Guest notes" value={booking.notes} /> : null}
           </CardContent>
@@ -164,8 +282,10 @@ export default function HostBookingDetailPage() {
                   : "Not yet"
               }
             />
-            <div className="pt-3">
+            <div className="flex flex-col items-start gap-2 pt-3">
+              {/* Each renders only in its own status, so at most one shows. */}
               <CheckInControl booking={booking} />
+              <CheckOutControl booking={booking} />
             </div>
           </CardContent>
         </Card>
