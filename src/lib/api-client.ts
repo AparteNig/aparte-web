@@ -1039,3 +1039,30 @@ export const fetchPlaceDetails = (placeId: string, sessionToken: string) =>
     `/places/${encodeURIComponent(placeId)}?sessionToken=${encodeURIComponent(sessionToken)}`,
     { auth: true, authCookie: "host" }
   );
+
+export type ZonePriceBand = {
+  tier: number;
+  label: string;
+  currency: string;
+  minNightly: number;
+  maxNightly: number;
+};
+
+export type ZoneGuidance = {
+  /** Null when the address falls outside every zone — most of Lagos is unbanded. */
+  zone: { id: number; name: string; slug: string; city: string; tier: number } | null;
+  bedrooms: number;
+  band: ZonePriceBand | null;
+  /** What published listings of this size in the zone actually charge. */
+  market: { count: number; minNightly: number; maxNightly: number; medianNightly: number } | null;
+};
+
+/**
+ * Price guidance for a point. A location with no zone is a normal 200 with a
+ * null band, not an error — callers should render "no guidance", not a failure.
+ */
+export const fetchZoneGuidance = (latitude: number, longitude: number, bedrooms: number) =>
+  apiFetch<ZoneGuidance>(
+    `/zones/guidance?latitude=${latitude}&longitude=${longitude}&bedrooms=${bedrooms}`,
+    { auth: true, authCookie: "host" }
+  );

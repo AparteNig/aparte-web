@@ -6,8 +6,16 @@ import { formatNaira, shareImageUrl, shareUrl } from "@/lib/share";
 
 type Props = { params: Promise<{ id: string }> };
 
-const locationOf = (listing: { city: string | null; state: string | null; country: string | null }) =>
-  [listing.city, listing.state, listing.country].filter(Boolean).join(", ");
+// The named area beats city when we have one: every listing is in Lagos now,
+// so "Lagos, Lagos, Nigeria" is accurate and says nothing, while "Lekki Phase 1"
+// is what a guest actually recognises. This text is also the og:title suffix,
+// so it is what a shared link shows.
+const locationOf = (listing: {
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  zone?: { name: string } | null;
+}) => [listing.zone?.name ?? listing.city, listing.state, listing.country].filter(Boolean).join(", ");
 
 /**
  * Metadata is what a shared link actually looks like in WhatsApp, iMessage or

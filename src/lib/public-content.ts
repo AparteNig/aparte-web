@@ -22,6 +22,8 @@ export type PublicListing = {
   city: string | null;
   state: string | null;
   country: string | null;
+  /** Named area, e.g. "Lekki Phase 1". Detail route only; null where unzoned. */
+  zone?: { name: string; slug: string; tier: number } | null;
   nightlyPrice: number;
   currency: string | null;
   maxGuests: number | null;

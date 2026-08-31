@@ -6,6 +6,7 @@ import { Controller, useForm } from "react-hook-form";
 
 import { Input } from "@/components/ui/input";
 import AddressPicker from "@/components/general/form/AddressPicker";
+import ZonePriceGuidance from "@/components/host/zone-price-guidance";
 import type { ResolvedPlace } from "@/lib/api-client";
 import Button from "@/components/general/Button";
 import LoadingOverlay from "@/components/general/LoadingOverlay";
@@ -121,6 +122,9 @@ export default function HostListingsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [selectedPlace, setSelectedPlace] = useState<ResolvedPlace | null>(null);
 
+  // Watched so price guidance re-reads as the host types, not only on save.
+  const watchedBedrooms = watch("bedrooms");
+  const watchedNightlyPrice = watch("nightlyPrice");
   const newListingPromotionValue = watch("newListingPromotionPercent") ?? "0";
   const weeklyDiscountValue = watch("weeklyDiscountPercent") ?? "0";
   const monthlyDiscountValue = watch("monthlyDiscountPercent") ?? "0";
@@ -318,6 +322,12 @@ export default function HostListingsPage() {
                     min="0"
                     placeholder="40000"
                     {...register("nightlyPrice", { required: true })}
+                  />
+                  <ZonePriceGuidance
+                    latitude={selectedPlace?.latitude}
+                    longitude={selectedPlace?.longitude}
+                    bedrooms={Number(watchedBedrooms) || 0}
+                    nightlyPrice={Number(watchedNightlyPrice) || null}
                   />
                 </label>
                 <label className="space-y-2 text-sm">
