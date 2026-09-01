@@ -11,7 +11,14 @@ export const SOCKET_EVENTS = {
   PAYOUT_UPDATED:  'payout:updated',
 } as const;
 
-export type BookingNewPayload     = { bookingId: number; guestName: string; listingTitle: string; hostId: number };
+export type BookingNewPayload = {
+  bookingId: number;
+  guestName: string;
+  /** The vehicle's description for car rentals — "2021 Lexus RX 350". */
+  listingTitle: string;
+  kind: 'stay' | 'vehicle';
+  hostId: number;
+};
 export type BookingUpdatedPayload = { bookingId: number; status: string; guestName: string; hostId: number };
 export type BreakfastRequestedPayload = {
   breakfastRequestId: number;
