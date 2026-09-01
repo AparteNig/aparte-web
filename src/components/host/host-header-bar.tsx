@@ -22,13 +22,20 @@ export const HostHeaderBar = ({ profile, className }: HostHeaderBarProps) => {
   const router = useRouter();
   const greeting = useMemo(getGreeting, []);
   const displayName = profile?.displayName || profile?.fullName || "Landlord";
-  const location = [
-    profile?.addressLine1,
-    profile?.city,
-    profile?.state,
-    profile?.country,
-  ]
+  /**
+   * City and state only — deliberately not the street line.
+   *
+   * A landlord does not need their own street address in the top chrome, and
+   * including it put whatever they typed on screen verbatim: one profile here
+   * renders as "4,agbelura,challenge,ibadan.Nigeria, Ibadan, Oyo, Nigeria",
+   * truncated mid-word. Dropping the line both reads better and makes the
+   * header immune to messy address data.
+   *
+   * State is skipped when it repeats the city (Lagos, Lagos).
+   */
+  const location = [profile?.city, profile?.state, profile?.country]
     .filter(Boolean)
+    .filter((part, index, parts) => parts.indexOf(part) === index)
     .join(", ");
 
   return (

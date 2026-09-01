@@ -80,6 +80,55 @@ export default function HostDashboardPage() {
     return { completed: total, totalBookings: bookings.length, revenue, active };
   }, [bookingsQuery.data]);
 
+
+  /**
+   * Replaces three hardcoded tips shown to every host forever under the
+   * heading "key insights for your portfolio". Advice that never changes and
+   * never refers to your account is noise dressed as insight, and it filled
+   * the space where something actionable belonged.
+   *
+   * Declared above the loading and error returns: every hook has to run in
+   * the same order on every render, and putting a useMemo after an early
+   * return changes the hook count between the loading pass and the loaded
+   * one. React catches it at runtime; the typechecker does not.
+   */
+  const attentionItems = useMemo(() => {
+    const items: { label: string; detail: string; href: string }[] = [];
+    if (!data) return items;
+
+    const drafts =
+      listingsData?.filter((listing) => listing.status === "draft").length ?? 0;
+    if (drafts > 0) {
+      items.push({
+        label: `${drafts} listing${drafts === 1 ? "" : "s"} still in draft`,
+        detail: "Guests cannot see a listing until it is submitted and approved.",
+        href: "/host/dashboard/listings",
+      });
+    }
+    if ((data.payoutStatus ?? "pending") !== "active" || !data.payoutBankName) {
+      items.push({
+        label: "Payout details incomplete",
+        detail: "We cannot send your earnings until a bank account is verified.",
+        href: "/host/dashboard/payouts",
+      });
+    }
+    if (!data.supportPhone) {
+      items.push({
+        label: "No support phone number",
+        detail: "Guests with an urgent problem have no way to reach you.",
+        href: "/host/dashboard/profile#support",
+      });
+    }
+    if (completedStats.active > 0) {
+      items.push({
+        label: `${completedStats.active} guest${completedStats.active === 1 ? "" : "s"} currently staying`,
+        detail: "Keep an eye on messages while they are in your property.",
+        href: "/host/dashboard/bookings",
+      });
+    }
+    return items;
+  }, [data, listingsData, completedStats.active]);
+
   if (isLoading) {
     const Block = ({ className = "" }: { className?: string }) => (
       <div className={`animate-pulse rounded-lg bg-slate-200 ${className}`} />
@@ -163,6 +212,8 @@ export default function HostDashboardPage() {
     listingsData?.filter((listing) => listing.status === "published").length ?? 0;
   const draftListingCount =
     listingsData?.filter((listing) => listing.status === "draft").length ?? 0;
+
+
 
   return (
     <div className="space-y-8">
@@ -320,15 +371,37 @@ export default function HostDashboardPage() {
             </Card>
             <Card className="border-slate-200">
               <CardHeader>
-                <CardTitle>Performance notes</CardTitle>
+                <CardTitle>Needs your attention</CardTitle>
                 <p className="text-sm text-slate-500">
-                  Key insights and reminders for your portfolio.
+                  Things only you can action, from your account right now.
                 </p>
               </CardHeader>
-              <CardContent className="space-y-3 text-sm text-slate-600">
-                <p>Keep response time under 1 hour to boost booking conversions.</p>
-                <p>Schedule post-stay cleaning reminders every Friday.</p>
-                <p>Offer weekly discounts to improve mid-week occupancy.</p>
+              <CardContent className="space-y-2 text-sm">
+                {attentionItems.length === 0 ? (
+                  <p className="text-slate-600">
+                    Nothing needs your attention. Your listings are live and your
+                    account is complete.
+                  </p>
+                ) : (
+                  attentionItems.map((item) => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={() => router.push(item.href)}
+                      className="flex w-full items-start justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2.5 text-left transition-colors hover:border-slate-300 hover:bg-slate-50"
+                    >
+                      <span>
+                        <span className="block font-medium text-slate-900">
+                          {item.label}
+                        </span>
+                        <span className="block text-xs text-slate-500">{item.detail}</span>
+                      </span>
+                      <span className="shrink-0 pt-0.5 text-xs font-semibold text-primary">
+                        Go
+                      </span>
+                    </button>
+                  ))
+                )}
               </CardContent>
             </Card>
           </section>
