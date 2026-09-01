@@ -259,12 +259,27 @@ export default function Home() {
             <a href="#explore">Explore</a>
             <a href="#faq">FAQ</a>
           </nav>
-          <Link
-            href="/host/login"
-            className="rounded-full bg-[#1d3b31] px-5 py-2 text-sm font-semibold text-white shadow-sm"
-          >
-            Become a host
-          </Link>
+          {/*
+            Two actions, not one. The single button read "Become a host" but
+            pointed at /host/login, so a new landlord landed on a sign-in form
+            and an existing one had no route back into their dashboard at all.
+            Sign in is the quieter of the two because acquisition is still the
+            page's job — but it has to exist.
+          */}
+          <div className="flex items-center gap-2">
+            <Link
+              href="/host/login"
+              className="rounded-full px-4 py-2 text-sm font-semibold text-[#1d3b31] transition-colors hover:bg-[#1d3b31]/10"
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/host/signup"
+              className="rounded-full bg-[#1d3b31] px-5 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+            >
+              Become a host
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -285,13 +300,13 @@ export default function Home() {
               <h1
                 className={`${playfair.className} max-w-3xl text-[40px] leading-[1] tracking-[-0.02em] sm:text-[52px] md:text-[64px]`}
               >
-                Find Thoughtfully Curated Shortstay Apartment
+                Find Thoughtfully Curated Short-Stay Apartments
                 {/* <br /> */}
               </h1>
               <p
                 className={`${poppins.className} mt-4 max-w-2xl text-[18px] leading-[1.2] text-white/85 md:text-[24px]`}
               >
-                Unique homes, flexible options, and trusted hosts—worldwide.
+                Unique homes, flexible options, and verified hosts across Lagos.
               </p>
               <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
                 <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-white/80">

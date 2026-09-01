@@ -28,11 +28,6 @@ const quickActions = [
     description: "Keep response times high and delight new inquiries.",
     href: "/host/dashboard/messages",
   },
-  {
-    title: "Test booking flow",
-    description: "Open the simulator to create demo bookings and advance statuses.",
-    href: "/test-booking",
-  },
 ];
 
 const listingStats = [
@@ -86,9 +81,36 @@ export default function HostDashboardPage() {
   }, [bookingsQuery.data]);
 
   if (isLoading) {
+    const Block = ({ className = "" }: { className?: string }) => (
+      <div className={`animate-pulse rounded-lg bg-slate-200 ${className}`} />
+    );
     return (
-      <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-500">
-        Loading your landlord overview...
+      <div className="space-y-6">
+        <div className="grid gap-4 md:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6"
+            >
+              <Block className="h-4 w-32" />
+              <Block className="h-3 w-44" />
+              <Block className="h-9 w-20" />
+            </div>
+          ))}
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {[0, 1].map((i) => (
+            <div
+              key={i}
+              className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6"
+            >
+              <Block className="h-4 w-36" />
+              {[0, 1, 2].map((r) => (
+                <Block key={r} className="h-14 w-full" />
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -96,9 +118,10 @@ export default function HostDashboardPage() {
   if (isError || !data) {
     return (
       <div className="space-y-4 rounded-3xl border border-red-200 bg-red-50 p-8 text-sm text-red-700">
-        <p>We couldn’t load your landlord data.</p>
+        <p className="font-medium">We couldn’t load your dashboard.</p>
         <p className="text-xs">
-          {error instanceof Error ? error.message : "Unexpected error"}
+          This is usually a connection problem. Try again, and if it keeps
+          happening, contact support and we will look into it.
         </p>
         <Button
           type="primary"
@@ -219,6 +242,17 @@ export default function HostDashboardPage() {
                   <p className="text-2xl font-semibold text-slate-900">
                     ₦{completedStats.revenue.toLocaleString()}
                   </p>
+                  {/*
+                    Bookings taken before the split-fee model carry no payout
+                    figure, so a host with completed stays can legitimately see
+                    zero here. Saying why beats a bare ₦0 next to a non-zero
+                    booking count, which reads as the dashboard being broken.
+                  */}
+                  {completedStats.revenue === 0 && completedStats.completed > 0 && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Earnings tracking started after these stays completed.
+                    </p>
+                  )}
                 </div>
                 <p className="text-sm text-slate-600">
                   Completed bookings:{" "}

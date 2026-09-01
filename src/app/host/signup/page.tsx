@@ -64,7 +64,7 @@ export default function HostSignupPage() {
   return (
     <AuthLayout containerClassName="flex flex-col gap-8">
       <AuthHeader
-        title="Create your landlord profile"
+        title="List your first apartment"
         subtitleStart="Kick off onboarding"
         boldText="in under 5 minutes"
         subtitleEnd="and get ready to publish listings."
