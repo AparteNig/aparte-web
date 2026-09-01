@@ -7,6 +7,9 @@ import {
   claimCautionDeposit,
   completeAdminBooking,
   getCautionDeposits,
+  createBreakfastOption,
+  getBreakfastOptions,
+  updateBreakfastOption,
   getPendingIdentityVerifications,
   reviewIdentityVerification,
   resolveCautionDeposit,
@@ -259,6 +262,28 @@ export const useAdminLogoutMutation = () =>
 // ── Caution deposits (escrow) ────────────────────────────────────────────────
 
 export const adminCautionDepositsQueryKey = ["admin", "cautionDeposits"];
+
+export const adminBreakfastQueryKey = ["admin", "breakfast-options"];
+
+export const useBreakfastOptionsQuery = () =>
+  useQuery({ queryKey: adminBreakfastQueryKey, queryFn: getBreakfastOptions });
+
+export const useCreateBreakfastOptionMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createBreakfastOption,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminBreakfastQueryKey }),
+  });
+};
+
+export const useUpdateBreakfastOptionMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: Record<string, unknown> }) =>
+      updateBreakfastOption(id, patch),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminBreakfastQueryKey }),
+  });
+};
 
 export const adminIdentityQueryKey = ["admin", "identity", "pending"];
 

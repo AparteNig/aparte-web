@@ -13,6 +13,7 @@ const navItems: NavItem[] = [
   { label: "Bookings", href: "/admin/bookings", icon: "bookings" },
   { label: "Payouts", href: "/admin/payouts", icon: "payouts" },
   { label: "Identity", href: "/admin/identity", icon: "users" },
+  { label: "Breakfast menu", href: "/admin/breakfast", icon: "listings" },
   { label: "Caution deposits", href: "/admin/caution-deposits", icon: "payouts" },
   { label: "Messages", href: "/admin/messages", icon: "messages" },
   { label: "All admins", href: "/admin/admins", icon: "users", requiresSuperAdmin: true },

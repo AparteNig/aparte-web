@@ -910,6 +910,67 @@ export type IdentitySummary = {
   idType: string | null;
 };
 
+export type BreakfastCategory = "continental" | "vegan" | "local" | "protein";
+
+export type BreakfastOptionRow = {
+  id: number;
+  name: string;
+  description: string;
+  category: BreakfastCategory;
+  imageUrl: string | null;
+  /** What an ADDITIONAL serving costs. The first each day is complimentary. */
+  price: number;
+  isActive: boolean;
+  sortOrder: number;
+};
+
+export const getBreakfastOptions = () =>
+  adminQuery<{ options: BreakfastOptionRow[] }>("/admin/breakfast-options").then(
+    (res) => res.options,
+  );
+
+export const createBreakfastOption = (payload: {
+  name: string;
+  description: string;
+  price: number;
+  category: BreakfastCategory;
+  imageKey: string;
+}) =>
+  adminQuery<{ option: BreakfastOptionRow }>("/admin/breakfast-options", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+/** Retiring is isActive:false — past orders reference these rows. */
+export const updateBreakfastOption = (
+  id: number,
+  patch: Partial<{
+    name: string;
+    description: string;
+    price: number;
+    category: BreakfastCategory;
+    imageKey: string;
+    isActive: boolean;
+  }>,
+) =>
+  adminQuery<{ option: BreakfastOptionRow }>(`/admin/breakfast-options/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+
+/** Dish photography lives under a platform-owned `breakfast/` prefix. */
+export const uploadBreakfastImage = (file: File) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("type", "breakfast");
+  return apiFetch<{ key: string; url: string }>("/uploads", {
+    method: "POST",
+    body: formData,
+    auth: true,
+    authCookie: "admin",
+  });
+};
+
 export const getPendingIdentityVerifications = () =>
   adminQuery<{ verifications: IdentityVerificationRow[]; pendingCount: number }>(
     "/admin/identity/pending",
