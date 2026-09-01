@@ -100,7 +100,8 @@ export default function HostIdentitySection({ hostId }: { hostId: number }) {
         <h2 className="text-lg font-semibold text-slate-900">Identity verification</h2>
         <p className="mt-1 text-sm text-slate-600">
           Nigerian law requires us to know who is letting property on Aparté. Your
-          documents are stored privately and seen only by a reviewer.
+          documents are stored privately, seen only by a reviewer, and deleted 14
+          days after your check is approved.
         </p>
       </div>
 

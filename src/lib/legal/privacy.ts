@@ -216,7 +216,7 @@ export const privacyDoc: LegalDoc = {
           items: [
             "**Account data** — for as long as your account is open, and up to 24 months after closure so we can handle disputes and repeat sign-up abuse.",
             "**Booking, payment and payout records** — at least 6 years after the booking, to meet accounting and tax obligations.",
-            "**Identity verification documents** — for the life of the account and 12 months after closure, then deleted. This applies to Guests and Hosts alike.",
+            "**Identity verification documents** — the ID image and selfie are deleted 14 days after your check is approved. We keep only a record that the check happened: the type of document, who reviewed it and when. A submission that was not accepted is deleted 90 days after the decision, so you have time to query it. This applies to Guests and Hosts alike.",
             "**Messages** — for as long as the account is open, and for the duration of any dispute.",
             `**Caution deposit records** — kept with the booking record. The deposit itself is held only until release, ${POLICY.cautionReleaseHours} hours after the stay ends unless a claim is raised.`,
             "**Analytics and crash data** — typically 12 months.",
