@@ -51,6 +51,12 @@ export type NavItem = {
   requiresSuperAdmin?: boolean;
   /** Unread count. 0 or undefined renders nothing. */
   badge?: number;
+  /**
+   * Optional heading this item sits under. Items carrying the same section
+   * render together beneath one label; items with none render exactly as
+   * before, so the host sidebar is untouched by this.
+   */
+  section?: string;
 };
 
 type SidebarNavProps = {
@@ -107,14 +113,25 @@ export const SidebarNav = ({ items, logoutHref, cookieName }: SidebarNavProps) =
           </button>
         </div>
         <nav className="space-y-1">
-          {filteredItems.map((item) => {
+          {filteredItems.map((item, index) => {
+            // A heading appears only when the section changes, so grouping is
+            // declared on the items themselves rather than by restructuring
+            // every caller into a nested shape.
+            const previous = filteredItems[index - 1];
+            const startsSection =
+              !collapsed && Boolean(item.section) && item.section !== previous?.section;
             const isSubPath = pathname.startsWith(`${item.href}/`);
             const isExact = pathname === item.href;
             const isActive = isExact || (item.href !== "/host/dashboard" && isSubPath);
             const IconComponent = item.icon ? iconRegistry[item.icon] : undefined;
             return (
+              <div key={item.href}>
+                {startsSection && (
+                  <p className="px-4 pb-1 pt-5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    {item.section}
+                  </p>
+                )}
               <Link
-                key={item.href}
                 href={item.href}
                 className={cn(
                   "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition",
@@ -145,6 +162,7 @@ export const SidebarNav = ({ items, logoutHref, cookieName }: SidebarNavProps) =
                   </span>
                 )}
               </Link>
+              </div>
             );
           })}
         </nav>
