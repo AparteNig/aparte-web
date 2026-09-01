@@ -208,6 +208,29 @@ export const logoutAdminRequest = () =>
     authCookie: "admin",
   });
 
+/**
+ * Starts a password reset.
+ *
+ * Returns an opaque handle whether or not the address has an account — the two
+ * responses are byte-identical, so there is nothing here for the client to
+ * accidentally leak. Carry the handle into resetPassword unchanged.
+ */
+export const requestPasswordReset = (email: string, entityType: "host" | "admin" = "host") =>
+  apiFetch<{ handle: string; devPreview?: string }>("/auth/password/forgot", {
+    method: "POST",
+    body: JSON.stringify({ email, entityType }),
+  });
+
+export const resetPassword = (payload: {
+  handle: string;
+  code: string;
+  password: string;
+}) =>
+  apiFetch<{ success?: boolean }>("/auth/password/reset", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
 export const verifyOtpRequest = (payload: {
   otpId: number;
   code: string;

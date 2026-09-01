@@ -140,8 +140,8 @@ export default function HostLoginPage() {
   return (
     <AuthLayout containerClassName="flex flex-col gap-8">
       <AuthHeader
-        title="Landlord Workspace login"
-        subtitle="Log in to manage listings, guests, and payouts in minutes."
+        title="Welcome back"
+        subtitle="Sign in to manage your listings, guests and payouts."
       />
       {error && (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -191,6 +191,15 @@ export default function HostLoginPage() {
             {...register("password", { required: "Password is required" })}
             error={errors.password?.message}
           />
+          {/* Beside the password it belongs to, where someone stuck on it looks. */}
+          <div className="-mt-2 text-right">
+            <Link
+              href="/host/forgot-password"
+              className="text-sm text-slate-600 underline-offset-2 hover:text-primary hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
           <Button
             type="primary"
             buttonType="submit"
@@ -202,9 +211,9 @@ export default function HostLoginPage() {
         </form>
       )}
       <p className="text-center text-sm text-slate-600">
-        Need to onboard?{" "}
+        New here?{" "}
         <Link href="/host/signup" className="font-semibold text-primary">
-          Create landlord account
+          Create a landlord account
         </Link>
       </p>
       <PageFooter />
