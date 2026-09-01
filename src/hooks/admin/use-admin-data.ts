@@ -7,6 +7,8 @@ import {
   claimCautionDeposit,
   completeAdminBooking,
   getCautionDeposits,
+  getPendingIdentityVerifications,
+  reviewIdentityVerification,
   resolveCautionDeposit,
   getAdminAuditLogs,
   getAdminAccounts,
@@ -257,6 +259,30 @@ export const useAdminLogoutMutation = () =>
 // ── Caution deposits (escrow) ────────────────────────────────────────────────
 
 export const adminCautionDepositsQueryKey = ["admin", "cautionDeposits"];
+
+export const adminIdentityQueryKey = ["admin", "identity", "pending"];
+
+export const useIdentityVerificationsQuery = () =>
+  useQuery({
+    queryKey: adminIdentityQueryKey,
+    queryFn: getPendingIdentityVerifications,
+  });
+
+export const useReviewIdentityMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      verificationId,
+      decision,
+      rejectionReason,
+    }: {
+      verificationId: number;
+      decision: "approved" | "rejected";
+      rejectionReason?: string;
+    }) => reviewIdentityVerification(verificationId, decision, rejectionReason),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminIdentityQueryKey }),
+  });
+};
 
 export const useCautionDepositsQuery = (status?: string) =>
   useQuery({

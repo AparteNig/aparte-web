@@ -35,8 +35,8 @@ export const privacyDoc: LegalDoc = {
             ],
             [
               "Verification data",
-              "Government-issued ID document, selfie or liveness image, address, business registration and bank account details for Hosts.",
-              "You, during onboarding.",
+              "Government-issued ID document (NIN, international passport, driver's licence or voter's card) and a selfie, from both Guests and Hosts. Address, business registration and bank account details, from Hosts.",
+              "You — Guests before their first booking, Hosts during onboarding.",
             ],
             [
               "Listing and vehicle data",
@@ -98,7 +98,7 @@ export const privacyDoc: LegalDoc = {
               "Performance of a contract with you.",
             ],
             [
-              "Verify Host identity, screen for fraud, investigate misuse, and keep the Platform safe.",
+              "Verify the identity of Guests and Hosts before a booking is made, screen for fraud, investigate misuse, and keep the Platform safe.",
               "Legitimate interest in a safe marketplace, and legal obligation.",
             ],
             [
@@ -216,7 +216,7 @@ export const privacyDoc: LegalDoc = {
           items: [
             "**Account data** — for as long as your account is open, and up to 24 months after closure so we can handle disputes and repeat sign-up abuse.",
             "**Booking, payment and payout records** — at least 6 years after the booking, to meet accounting and tax obligations.",
-            "**Identity verification documents** — for the life of the Host account and 12 months after closure, then deleted.",
+            "**Identity verification documents** — for the life of the account and 12 months after closure, then deleted. This applies to Guests and Hosts alike.",
             "**Messages** — for as long as the account is open, and for the duration of any dispute.",
             `**Caution deposit records** — kept with the booking record. The deposit itself is held only until release, ${POLICY.cautionReleaseHours} hours after the stay ends unless a claim is raised.`,
             "**Analytics and crash data** — typically 12 months.",

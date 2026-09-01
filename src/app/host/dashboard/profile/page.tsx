@@ -8,6 +8,7 @@ import {
   HostSectionConfig,
   HostSectionForm,
 } from "@/components/host/host-section-form";
+import HostIdentitySection from "@/components/host/host-identity-section";
 import { useHostProfileQuery } from "@/hooks/use-host-profile";
 import Button from "@/components/general/Button";
 import { cn } from "@/lib/utils";
@@ -57,26 +58,12 @@ const PROFILE_SECTIONS: HostSectionConfig[] = [
     tabLabel: "Identity",
     apiSection: "kyc",
     title: "Identity verification",
-    description:
-      "Provide government ID details to complete compliance checks.",
+    description: "Provide government ID details to complete compliance checks.",
     stepKey: "IDENTITY_UPLOAD",
-    fields: [
-      { name: "idType", label: "ID type (e.g. National ID, Driver’s License)", required: true },
-      { name: "idNumber", label: "ID number", required: true },
-      {
-        name: "idDocumentKey",
-        label: "ID document storage key",
-        helperText:
-          "Upload via /uploads (type=profile) and paste the returned key.",
-        required: true,
-      },
-      {
-        name: "selfieDocumentKey",
-        label: "Selfie verification key",
-        helperText: "Upload a selfie holding your ID and paste the key.",
-        required: true,
-      },
-    ],
+    // Rendered by HostIdentitySection, not the generic field renderer: it
+    // uploads the files itself and shows review status. The old config asked
+    // the host to paste an S3 key returned by a curl call.
+    fields: [],
   },
   {
     id: "business",
@@ -214,6 +201,10 @@ export default function HostProfilePage() {
             section.id === "preferences" ? (
               <div key={section.id} id={section.id}>
                 <HostLanguagePicker profile={data} />
+              </div>
+            ) : section.id === "kyc" ? (
+              <div key={section.id} id={section.id}>
+                <HostIdentitySection hostId={data.id} />
               </div>
             ) : (
               <HostSectionForm key={section.id} config={section} profile={data} />

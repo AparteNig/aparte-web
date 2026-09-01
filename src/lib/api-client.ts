@@ -888,6 +888,98 @@ export const resolveCautionDeposit = (
     body: JSON.stringify({ amountToHost, notes }),
   });
 
+export type IdentityStatus = "not_started" | "pending" | "approved" | "rejected";
+
+export type IdentityVerificationRow = {
+  id: number;
+  subjectType: "user" | "host";
+  subjectId: number;
+  subjectName: string;
+  subjectEmail: string;
+  idType: "nin" | "passport" | "drivers_licence" | "voters_card";
+  idNumber: string;
+  status: IdentityStatus;
+  submittedAt: string | null;
+};
+
+export type IdentitySummary = {
+  status: IdentityStatus;
+  submittedAt: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+  idType: string | null;
+};
+
+export const getPendingIdentityVerifications = () =>
+  adminQuery<{ verifications: IdentityVerificationRow[]; pendingCount: number }>(
+    "/admin/identity/pending",
+  );
+
+/**
+ * Fetched per verification, never for a whole page: each call mints two
+ * 60-second signed links to somebody's identity documents and is written to
+ * the audit log, so it happens when a reviewer opens one, not when the queue
+ * renders.
+ */
+export const getIdentityDocuments = (verificationId: number) =>
+  adminQuery<{
+    documentUrl: string;
+    selfieUrl: string;
+    expiresInSeconds: number;
+    idType: string;
+    idNumber: string;
+  }>(`/admin/identity/${verificationId}/documents`);
+
+export const reviewIdentityVerification = (
+  verificationId: number,
+  decision: "approved" | "rejected",
+  rejectionReason?: string,
+) =>
+  adminQuery<{ id: number; status: IdentityStatus; reviewedAt: string | null }>(
+    `/admin/identity/${verificationId}/review`,
+    { method: "POST", body: JSON.stringify({ decision, rejectionReason }) },
+  );
+
+/** The signed-in host's own check. */
+/**
+ * Uploads one identity file. `entityId` is `<actorType>-<id>` because the
+ * server files identity documents under a top-level `identity/` prefix and
+ * checks the caller owns that folder — a guest and a host sharing an id must
+ * not land in the same place.
+ */
+export const uploadIdentityFile = (
+  file: File,
+  actorType: "user" | "host",
+  actorId: number,
+) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("type", "identity");
+  formData.append("entityId", `${actorType}-${actorId}`);
+  return apiFetch<{ key: string; url: string }>("/uploads", {
+    method: "POST",
+    body: formData,
+    auth: true,
+    authCookie: actorType === "host" ? "host" : "admin",
+  });
+};
+
+export const getHostIdentity = () =>
+  apiFetch<IdentitySummary>("/hosts/identity", { auth: true, authCookie: "host" });
+
+export const submitHostIdentity = (payload: {
+  idType: string;
+  idNumber: string;
+  documentKey: string;
+  selfieKey: string;
+}) =>
+  apiFetch<IdentitySummary>("/hosts/identity", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    auth: true,
+    authCookie: "host",
+  });
+
 export const updateAdminBookingStatus = (
   bookingId: number,
   payload: { status: string; notes?: string },
