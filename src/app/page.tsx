@@ -43,6 +43,8 @@ import InstagramIcon from "@/assets/icons/InstagramIcon";
 import XIcon from "@/assets/icons/XIcon";
 import TikTokIcon from "@/assets/icons/TikTok";
 import CaretRight from "@/assets/icons/CaretRight";
+import { showToast } from "@/components/general/ui/CustomToast";
+import { COMPANY } from "@/lib/company";
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
@@ -63,6 +65,9 @@ export default function Home() {
   const locationsRef = useRef<HTMLDivElement | null>(null);
   const reviewsRef = useRef<HTMLDivElement | null>(null);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
+  const [waitlistEmail, setWaitlistEmail] = useState("");
+  const [waitlistPhone, setWaitlistPhone] = useState("");
+  const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
   const listings = [
     { id: "modern-loft-lagos", title: "Modern Loft", location: "Lagos", image: Listing1 },
     {
@@ -197,6 +202,48 @@ export default function Home() {
     return [words.slice(0, 2).join(" "), words.slice(2).join(" ")];
   };
 
+  const apiBase =
+    process.env.NEXT_PUBLIC_API_URL ?? "https://humble-liberation-staging.up.railway.app";
+
+  const handleWaitlistSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!waitlistEmail.trim()) {
+      showToast.error("Please enter a valid email.");
+      return;
+    }
+    setWaitlistSubmitting(true);
+    try {
+      const response = await fetch(
+        `${apiBase.replace(/\/$/, "")}/waitlist`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: waitlistEmail.trim(),
+            phone: waitlistPhone.trim() || undefined,
+          }),
+        },
+      );
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message =
+          payload && typeof payload === "object" && "message" in payload
+            ? (payload as { message: string }).message
+            : "Failed to join waitlist.";
+        throw new Error(message);
+      }
+      setWaitlistEmail("");
+      setWaitlistPhone("");
+      showToast.success("You're on the waitlist! We'll be in touch soon.");
+    } catch (error) {
+      showToast.error(
+        error instanceof Error ? error.message : "Failed to join waitlist.",
+      );
+    } finally {
+      setWaitlistSubmitting(false);
+    }
+  };
+
   return (
     <div className="flex min-h-screen flex-col bg-[#f7f2ea] text-slate-900">
       <header className="sticky top-0 z-30 w-full bg-[#f7f2ea]/90 backdrop-blur">
@@ -212,12 +259,27 @@ export default function Home() {
             <a href="#explore">Explore</a>
             <a href="#faq">FAQ</a>
           </nav>
-          <Link
-            href="/host/login"
-            className="rounded-full bg-[#1d3b31] px-5 py-2 text-sm font-semibold text-white shadow-sm"
-          >
-            Become a host
-          </Link>
+          {/*
+            Two actions, not one. The single button read "Become a host" but
+            pointed at /host/login, so a new landlord landed on a sign-in form
+            and an existing one had no route back into their dashboard at all.
+            Sign in is the quieter of the two because acquisition is still the
+            page's job — but it has to exist.
+          */}
+          <div className="flex items-center gap-2">
+            <Link
+              href="/host/login"
+              className="rounded-full px-4 py-2 text-sm font-semibold text-[#1d3b31] transition-colors hover:bg-[#1d3b31]/10"
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/host/signup"
+              className="rounded-full bg-[#1d3b31] px-5 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+            >
+              Become a host
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -238,13 +300,13 @@ export default function Home() {
               <h1
                 className={`${playfair.className} max-w-3xl text-[40px] leading-[1] tracking-[-0.02em] sm:text-[52px] md:text-[64px]`}
               >
-                Find Thoughtfully Curated Shortstay Apartment
+                Find Thoughtfully Curated Short-Stay Apartments
                 {/* <br /> */}
               </h1>
               <p
                 className={`${poppins.className} mt-4 max-w-2xl text-[18px] leading-[1.2] text-white/85 md:text-[24px]`}
               >
-                Unique homes, flexible options, and trusted hosts—worldwide.
+                Unique homes, flexible options, and verified hosts across Lagos.
               </p>
               <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
                 <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-white/80">
@@ -796,6 +858,58 @@ export default function Home() {
             </button>
           </div>
         </section>
+
+        <section className="bg-[#F7F2EA] py-16">
+          <div className="mx-auto w-full max-w-5xl px-6">
+            <div className="grid gap-8 rounded-3xl border border-[#E4D9CB] bg-white/70 p-8 shadow-sm md:grid-cols-[1.1fr_0.9fr]">
+              <div className="space-y-4">
+                <p className={`${poppins.className} text-sm uppercase tracking-[0.3em] text-[#9A7D52]`}>
+                  Join the waitlist
+                </p>
+                <h3 className={`${poppins.className} text-[32px] font-semibold text-[#2A3130]`}>
+                  Be first to hear when new apartments drop.
+                </h3>
+                <p className="text-sm text-slate-600">
+                  Get early access to new listings, city launches, and exclusive stay offers. We’ll notify you
+                  as soon as we open in your area.
+                </p>
+                <div className="rounded-2xl border border-dashed border-[#E4D9CB] bg-[#FBF8F3] p-4 text-xs text-slate-600">
+                  We only use your email and phone number for Aparte updates. No spam.
+                </div>
+              </div>
+              <form className="space-y-4" onSubmit={handleWaitlistSubmit}>
+                <label className="block space-y-2 text-sm text-slate-700">
+                  <span className="font-semibold">Email address</span>
+                  <input
+                    type="email"
+                    required
+                    placeholder="you@example.com"
+                    className="w-full rounded-2xl border border-[#E0D5C6] bg-white px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C7A67A]"
+                    value={waitlistEmail}
+                    onChange={(event) => setWaitlistEmail(event.target.value)}
+                  />
+                </label>
+                <label className="block space-y-2 text-sm text-slate-700">
+                  <span className="font-semibold">Phone number</span>
+                  <input
+                    type="tel"
+                    placeholder="+234 801 234 5678"
+                    className="w-full rounded-2xl border border-[#E0D5C6] bg-white px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C7A67A]"
+                    value={waitlistPhone}
+                    onChange={(event) => setWaitlistPhone(event.target.value)}
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={waitlistSubmitting}
+                  className="w-full rounded-full bg-[#2A3130] px-6 py-3 text-xs font-semibold text-white transition hover:bg-[#1F2423] disabled:bg-slate-400"
+                >
+                  {waitlistSubmitting ? "Joining..." : "Join waitlist"}
+                </button>
+              </form>
+            </div>
+          </div>
+        </section>
       </main>
 
       <footer className="bg-[#f7f2ea] py-12s">
@@ -828,10 +942,35 @@ export default function Home() {
           </div>
           <div className="space-y-3 text-xs text-slate-500">
             <p className="text-sm font-semibold text-slate-700">Support</p>
-            <p>Contact us</p>
-            <p>FAQs</p>
-            <p>Help Center</p>
-            <p>Live chat</p>
+            <p>
+              <a
+                href={`mailto:${COMPANY.emails.support}`}
+                className="transition-colors hover:text-primary"
+              >
+                Contact us
+              </a>
+            </p>
+            <p>
+              <a href="#faq" className="transition-colors hover:text-primary">
+                FAQs
+              </a>
+            </p>
+            <p>
+              <Link
+                href="/legal/privacy"
+                className="transition-colors hover:text-primary"
+              >
+                Privacy Policy
+              </Link>
+            </p>
+            <p>
+              <Link
+                href="/legal/terms"
+                className="transition-colors hover:text-primary"
+              >
+                Terms &amp; Conditions
+              </Link>
+            </p>
           </div>
           <div className="space-y-3 text-xs text-slate-500">
             <p className="text-sm font-semibold text-slate-700">Contact</p>
@@ -840,11 +979,22 @@ export default function Home() {
             <p>Email address</p>
           </div>
         </div>
-        <p
-          className={`${inriaSerif.className} mt-1 py-4 text-center text-[16px] text-[#343434]`}
+        <div
+          className={`${inriaSerif.className} mt-1 flex flex-col items-center gap-2 py-4 text-[16px] text-[#343434] md:flex-row md:justify-center md:gap-4`}
         >
-          Aparte@2026. All rights reserved.
-        </p>
+          <p>Aparte@2026. All rights reserved.</p>
+          <span aria-hidden className="hidden text-[#B5B5B5] md:inline">
+            |
+          </span>
+          <div className="flex items-center gap-4 text-[14px]">
+            <Link href="/legal/privacy" className="hover:text-primary">
+              Privacy Policy
+            </Link>
+            <Link href="/legal/terms" className="hover:text-primary">
+              Terms &amp; Conditions
+            </Link>
+          </div>
+        </div>
       </footer>
     </div>
   );

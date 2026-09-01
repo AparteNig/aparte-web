@@ -4,13 +4,18 @@ import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useQueryClient } from "@tanstack/react-query";
 
 import Button from "@/components/general/Button";
 import LoadingOverlay from "@/components/general/LoadingOverlay";
 import MediaGalleryModal from "@/components/general/MediaGalleryModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import AddressPicker from "@/components/general/form/AddressPicker";
+import ZonePriceGuidance from "@/components/host/zone-price-guidance";
+import type { ResolvedPlace } from "@/lib/api-client";
 import {
+  hostListingQueryKey,
   useAttachListingPhotosMutation,
   useDeleteListingPhotoMutation,
   useHostListingQuery,
@@ -20,10 +25,20 @@ import {
 } from "@/hooks/use-host-listings";
 import { useHostProfileQuery } from "@/hooks/use-host-profile";
 import { cn } from "@/lib/utils";
-import { uploadListingAsset } from "@/lib/api-client";
+import {
+  addListingExplorePost,
+  deleteListingExplorePost,
+  getListingExplorePosts,
+  uploadExplorePost,
+  uploadListingAsset,
+  type ExplorePost,
+} from "@/lib/api-client";
+import type { ListingCategory } from "@/types/listing";
+import { LISTING_CATEGORIES } from "@/types/listing";
 
 type ListingEditFormValues = {
   title: string;
+  category: ListingCategory | "";
   summary: string;
   description: string;
   addressLine1: string;
@@ -34,7 +49,6 @@ type ListingEditFormValues = {
   postalCode: string;
   nightlyPrice: string;
   cleaningFee: string;
-  serviceFee: string;
   maxGuests: string;
   bedrooms: string;
   bathrooms: string;
@@ -49,6 +63,7 @@ type ListingEditFormValues = {
 
 const emptyListingForm: ListingEditFormValues = {
   title: "",
+  category: "",
   summary: "",
   description: "",
   addressLine1: "",
@@ -59,7 +74,6 @@ const emptyListingForm: ListingEditFormValues = {
   postalCode: "",
   nightlyPrice: "",
   cleaningFee: "",
-  serviceFee: "",
   maxGuests: "",
   bedrooms: "",
   bathrooms: "",
@@ -113,10 +127,19 @@ export default function HostListingDetailPage() {
   const attachPhotos = useAttachListingPhotosMutation(listingId);
   const deletePhotoMutation = useDeleteListingPhotoMutation(listingId);
   const [showEditForm, setShowEditForm] = useState(false);
+  // The address as a resolved Place. null means "no verified address selected",
+  // which is a different thing from "the text field is empty".
+  const [selectedPlace, setSelectedPlace] = useState<ResolvedPlace | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [exploreError, setExploreError] = useState<string | null>(null);
+  const [uploadingExplore, setUploadingExplore] = useState(false);
+  const [explorePosts, setExplorePosts] = useState<ExplorePost[]>([]);
+  const [exploreMax, setExploreMax] = useState(5);
+  const exploreInputRef = useRef<HTMLInputElement | null>(null);
+  const queryClient = useQueryClient();
   const [pendingPhotoRemovals, setPendingPhotoRemovals] = useState<number[]>([]);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
@@ -143,6 +166,9 @@ export default function HostListingDetailPage() {
     formState: { isDirty, isSubmitting },
   } = useForm<ListingEditFormValues>({ defaultValues: emptyListingForm });
 
+  // Watched so price guidance re-reads as the host types, not only on save.
+  const watchedBedrooms = watch("bedrooms");
+  const watchedNightlyPrice = watch("nightlyPrice");
   const newListingPromotionValue = watch("newListingPromotionPercent") ?? "0";
   const weeklyDiscountValue = watch("weeklyDiscountPercent") ?? "0";
   const monthlyDiscountValue = watch("monthlyDiscountPercent") ?? "0";
@@ -199,21 +225,40 @@ export default function HostListingDetailPage() {
     setActiveMediaIndex(index);
   };
 
+  // Rebuild the picker's value from what is stored. A listing saved before the
+  // picker existed has no googlePlaceId, so it hydrates with a null placeId and
+  // the host is required to re-pick before it can be saved again.
+  useEffect(() => {
+    if (!listing) return;
+    setSelectedPlace(
+      listing.googlePlaceId
+        ? {
+            placeId: listing.googlePlaceId,
+            formattedAddress:
+              listing.formattedAddress ??
+              [listing.addressLine1, listing.city, listing.country].filter(Boolean).join(", "),
+            latitude: listing.latitude,
+            longitude: listing.longitude,
+            addressLine1: listing.addressLine1,
+            city: listing.city,
+            state: listing.state ?? "",
+            country: listing.country,
+            postalCode: listing.postalCode ?? "",
+          }
+        : null
+    );
+  }, [listing]);
+
   useEffect(() => {
     if (listing) {
       reset({
         title: listing.title,
+        category: listing.category ?? "",
         summary: listing.summary ?? "",
         description: listing.description,
-        addressLine1: listing.addressLine1,
         addressLine2: listing.addressLine2 ?? "",
-        city: listing.city,
-        state: listing.state ?? "",
-        country: listing.country,
-        postalCode: listing.postalCode ?? "",
         nightlyPrice: String(listing.nightlyPrice ?? ""),
         cleaningFee: String(listing.cleaningFee ?? ""),
-        serviceFee: String(listing.serviceFee ?? ""),
         maxGuests: String(listing.maxGuests ?? ""),
         bedrooms: String(listing.bedrooms ?? ""),
         bathrooms: String(listing.bathrooms ?? ""),
@@ -243,17 +288,16 @@ export default function HostListingDetailPage() {
     try {
       await updateListing.mutateAsync({
         title: values.title,
+        category: values.category || null,
         summary: values.summary,
         description: values.description,
-        addressLine1: values.addressLine1,
         addressLine2: values.addressLine2,
-        city: values.city,
-        state: values.state,
-        country: values.country,
-        postalCode: values.postalCode,
+        // Only the place id travels. The backend re-resolves it and writes
+        // addressLine1/city/state/country/postalCode plus the coordinates, so
+        // the pin can never disagree with the address shown here.
+        ...(selectedPlace ? { googlePlaceId: selectedPlace.placeId } : {}),
         nightlyPrice: Number(values.nightlyPrice),
         cleaningFee: Number(values.cleaningFee),
-        serviceFee: Number(values.serviceFee),
         maxGuests: Number(values.maxGuests),
         bedrooms: Number(values.bedrooms),
         bathrooms: Number(values.bathrooms),
@@ -286,6 +330,82 @@ export default function HostListingDetailPage() {
     setPendingPhotoRemovals((prev) =>
       prev.includes(photoId) ? prev.filter((id) => id !== photoId) : [...prev, photoId],
     );
+  };
+
+  // ── Explore clips ──
+  // Up to EXPLORE_MAX clips per listing. The backend transcodes whatever
+  // arrives down to 2MB, so hosts can hand it a raw phone recording; we only
+  // guard the obviously-wrong cases up front.
+  useEffect(() => {
+    if (!listingId) return;
+    let cancelled = false;
+    getListingExplorePosts(listingId)
+      .then((res) => {
+        if (cancelled) return;
+        setExplorePosts(res.explorePosts);
+        setExploreMax(res.max);
+      })
+      .catch(() => {
+        /* the panel just shows empty — not worth blocking the page for */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listingId]);
+
+  const handleExploreSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!listingId) return;
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    if (files.length === 0) return;
+    setExploreError(null);
+
+    if (files.some((file) => !file.type.startsWith("video/"))) {
+      setExploreError("Explore clips must be video files.");
+      event.target.value = "";
+      return;
+    }
+
+    const room = exploreMax - explorePosts.length;
+    if (files.length > room) {
+      setExploreError(
+        room === 0
+          ? `This listing already has ${exploreMax} clips. Remove one first.`
+          : `Only ${room} more clip${room === 1 ? "" : "s"} can be added.`,
+      );
+      event.target.value = "";
+      return;
+    }
+
+    setUploadingExplore(true);
+    try {
+      for (const file of files) {
+        const upload = await uploadExplorePost(listingId, file);
+        const res = await addListingExplorePost(listingId, upload.key);
+        setExplorePosts(res.explorePosts);
+        setExploreMax(res.max);
+      }
+      await queryClient.invalidateQueries({ queryKey: hostListingQueryKey(listingId) });
+    } catch (error) {
+      setExploreError(error instanceof Error ? error.message : "Failed to upload the clip.");
+    } finally {
+      setUploadingExplore(false);
+      if (event.target) event.target.value = "";
+    }
+  };
+
+  const handleExploreRemove = async (postId: number) => {
+    if (!listingId) return;
+    setExploreError(null);
+    setUploadingExplore(true);
+    try {
+      const res = await deleteListingExplorePost(listingId, postId);
+      setExplorePosts(res.explorePosts);
+      await queryClient.invalidateQueries({ queryKey: hostListingQueryKey(listingId) });
+    } catch (error) {
+      setExploreError(error instanceof Error ? error.message : "Failed to remove the clip.");
+    } finally {
+      setUploadingExplore(false);
+    }
   };
 
   const handleMediaSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -530,6 +650,11 @@ export default function HostListingDetailPage() {
                   {listing.status.replace("_", " ")}
                 </span>
                 <h1 className="text-3xl font-semibold text-slate-900">{listing.title}</h1>
+                {listing.category && (
+                  <span className="w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium capitalize text-slate-600">
+                    {listing.category.replace("_", " ")}
+                  </span>
+                )}
                 <p className="text-sm text-slate-600">
                   {listing.addressLine1}, {listing.city}, {listing.country}
                 </p>
@@ -570,6 +695,93 @@ export default function HostListingDetailPage() {
                   <p className="text-xs text-slate-500">Supported: JPG, PNG, MP4 up to 10MB per file.</p>
                 </div>
               )}
+
+              {/* ── Explore clip ── */}
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-slate-900">Explore clips</p>
+                    <p className="text-xs text-slate-500">
+                      Short vertical videos that front this listing in the app&apos;s Explore feed.
+                      Each one is compressed to 2MB and trimmed to 15 seconds automatically.
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "rounded-full px-3 py-1 text-xs font-medium",
+                      explorePosts.length > 0
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-slate-200 text-slate-600",
+                    )}
+                  >
+                    {explorePosts.length} of {exploreMax}
+                  </span>
+                </div>
+
+                {exploreError && (
+                  <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                    {exploreError}
+                  </div>
+                )}
+
+                {explorePosts.length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {explorePosts.map((post, index) => (
+                      <div key={post.id} className="group relative">
+                        {/* Playable inline so the host can check the clip
+                            without opening the phone app. */}
+                        <video
+                          src={post.url}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          className="h-56 w-32 rounded-xl bg-black object-cover"
+                        />
+                        <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white">
+                          {index + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleExploreRemove(post.id)}
+                          disabled={uploadingExplore}
+                          aria-label={`Remove clip ${index + 1}`}
+                          className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white transition hover:bg-rose-600 disabled:opacity-50"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
+                  <button
+                    type="button"
+                    className="text-primary underline-offset-4 transition hover:underline disabled:opacity-50"
+                    onClick={() => exploreInputRef.current?.click()}
+                    disabled={uploadingExplore || explorePosts.length >= exploreMax}
+                  >
+                    {uploadingExplore
+                      ? "Processing video…"
+                      : explorePosts.length >= exploreMax
+                      ? `Limit of ${exploreMax} reached`
+                      : "Add clip +"}
+                  </button>
+                  <input
+                    ref={exploreInputRef}
+                    type="file"
+                    accept="video/*"
+                    multiple
+                    className="hidden"
+                    onChange={handleExploreSelection}
+                  />
+                </div>
+                {uploadingExplore && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Re-encoding on the server — larger files take a few seconds each.
+                  </p>
+                )}
+              </div>
             </div>
           </section>
 
@@ -619,13 +831,20 @@ export default function HostListingDetailPage() {
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Service fee</span>
+                  <span>Caution fee</span>
                   <span className="font-semibold text-slate-900">
-                    {currencyFormatter.format(listing.serviceFee)}
+                    {currencyFormatter.format(listing.cautionFee ?? 0)}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                  Update fees anytime to reflect operational costs. Guests will see the total before booking.
+                  You set your nightly price and cleaning fee, and keep your cleaning fee in full.
+                  Aparte deducts its commission from the nightly total and charges guests a separate
+                  service fee.
+                </p>
+                <p className="text-xs text-slate-500">
+                  The caution fee is set by Aparte and held by us, never paid into your wallet. It
+                  returns to the guest after checkout unless you report damage and our team upholds
+                  the claim.
                 </p>
               </CardContent>
         </Card>
@@ -719,6 +938,22 @@ export default function HostListingDetailPage() {
                     <Input {...register("title", { required: true })} />
                   </label>
                   <label className="space-y-2 text-sm">
+                    <span className="font-semibold text-slate-800">
+                      Category <span className="text-rose-500">*</span>
+                    </span>
+                    <select
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      {...register("category", { required: true })}
+                    >
+                      <option value="">Select a category</option>
+                      {LISTING_CATEGORIES.map((cat) => (
+                        <option key={cat.value} value={cat.value}>
+                          {cat.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="space-y-2 text-sm">
                     <span className="font-semibold text-slate-800">Summary</span>
                     <Input {...register("summary")} placeholder="Short headline for cards" />
                   </label>
@@ -730,41 +965,41 @@ export default function HostListingDetailPage() {
                       {...register("description", { required: true })}
                     />
                   </label>
+                  {/*
+                    City, state, country and postal code are no longer inputs.
+                    They are derived from the picked place server-side, which is
+                    what stops a listing claiming city "Lekki" for an address on
+                    the Lagos-Ibadan expressway. Line 2 stays free text because a
+                    flat or floor number is real information Google does not have.
+                  */}
+                  <div className="md:col-span-2">
+                    <AddressPicker
+                      label="Address"
+                      required
+                      value={selectedPlace}
+                      onChange={setSelectedPlace}
+                    />
+                  </div>
                   <label className="space-y-2 text-sm">
-                    <span className="font-semibold text-slate-800">Address line 1</span>
-                    <Input {...register("addressLine1", { required: true })} />
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="font-semibold text-slate-800">Address line 2</span>
+                    <span className="font-semibold text-slate-800">
+                      Flat / floor / building{" "}
+                      <span className="font-normal text-slate-500">(optional)</span>
+                    </span>
                     <Input {...register("addressLine2")} />
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="font-semibold text-slate-800">City</span>
-                    <Input {...register("city", { required: true })} />
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="font-semibold text-slate-800">State</span>
-                    <Input {...register("state")} />
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="font-semibold text-slate-800">Country</span>
-                    <Input {...register("country", { required: true })} />
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="font-semibold text-slate-800">Postal code</span>
-                    <Input {...register("postalCode")} />
                   </label>
                   <label className="space-y-2 text-sm">
                     <span className="font-semibold text-slate-800">Nightly price</span>
                     <Input type="number" min="0" {...register("nightlyPrice", { required: true })} />
+                    <ZonePriceGuidance
+                      latitude={selectedPlace?.latitude}
+                      longitude={selectedPlace?.longitude}
+                      bedrooms={Number(watchedBedrooms) || 0}
+                      nightlyPrice={Number(watchedNightlyPrice) || null}
+                    />
                   </label>
                   <label className="space-y-2 text-sm">
                     <span className="font-semibold text-slate-800">Cleaning fee</span>
                     <Input type="number" min="0" {...register("cleaningFee", { required: true })} />
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="font-semibold text-slate-800">Service fee</span>
-                    <Input type="number" min="0" {...register("serviceFee", { required: true })} />
                   </label>
                   <label className="space-y-2 text-sm">
                     <span className="font-semibold text-slate-800">Max guests</span>

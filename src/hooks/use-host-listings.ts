@@ -17,7 +17,7 @@ import type { HostListing, HostListingDetail, ListingPhotoPayload } from "@/type
 export const hostListingsQueryKey = ["hostListings"];
 export const hostListingQueryKey = (listingId: number) => ["hostListing", listingId];
 
-export const useHostListingsQuery = () =>
+export const useHostListingsQuery = (enabled = true) =>
   useQuery<HostListing[]>({
     queryKey: hostListingsQueryKey,
     queryFn: async () => {
@@ -27,6 +27,7 @@ export const useHostListingsQuery = () =>
     staleTime: 1000 * 60 * 5,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
+    enabled,
   });
 
 export const useCreateListingMutation = () => {
@@ -92,17 +93,17 @@ export const useUpdateListingMutation = (listingId?: number) => {
         Pick<
           HostListing,
           | "title"
+          | "category"
           | "summary"
           | "description"
-          | "addressLine1"
           | "addressLine2"
-          | "city"
-          | "state"
-          | "country"
-          | "postalCode"
+          // addressLine1, city, state, country and postalCode are deliberately
+          // absent: the backend derives them from googlePlaceId and ignores
+          // them if sent. Listing them here would advertise a write that
+          // silently does nothing.
+          | "googlePlaceId"
           | "nightlyPrice"
           | "cleaningFee"
-          | "serviceFee"
           | "maxGuests"
           | "bedrooms"
           | "bathrooms"

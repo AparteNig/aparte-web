@@ -31,6 +31,10 @@ export type HostProfile = {
   state: string;
   country: string;
   postalCode: string;
+  /** Stable Places identifier; null on profiles predating the address picker. */
+  googlePlaceId: string | null;
+  /** Google's canonical one-line address, for display. */
+  formattedAddress: string | null;
   idType: string;
   idNumber: string;
   idDocumentKey: string;

@@ -1,14 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useHostBookingsQuery, useCompleteBookingMutation } from "@/hooks/use-bookings";
+import Button from "@/components/general/Button";
 import { useHostListingsQuery } from "@/hooks/use-host-listings";
 import { useListingCalendarQuery } from "@/hooks/use-listing-calendar";
+import { getHostVehicleBookings } from "@/lib/api-client";
+import {
+  useHostVehiclesQuery,
+  useHostVehicleQuery,
+  useAddVehicleCalendarBlockMutation,
+  useDeleteVehicleCalendarBlockMutation,
+} from "@/hooks/use-host-vehicles";
 import { cn } from "@/lib/utils";
-import type { ListingCalendarBlock } from "@/types/listing";
+import type { ListingCalendarBlock, HostBooking } from "@/types/listing";
+import ApprovalQueue from "@/components/host/ApprovalQueue";
+import CheckInControl from "@/components/host/CheckInDialog";
+import CheckOutControl from "@/components/host/CheckOutDialog";
+import { Car } from "lucide-react";
+import { bookingSubject } from "@/lib/booking-display";
 
 const formatDate = (date: Date) => date.toISOString().split("T")[0];
 const isDateBetween = (date: string, start: string, end: string) => {
@@ -16,7 +31,12 @@ const isDateBetween = (date: string, start: string, end: string) => {
   return target >= new Date(start).getTime() && target <= new Date(end).getTime();
 };
 
+type Tab = "properties" | "vehicles";
+
 export default function HostBookingsPage() {
+  const router = useRouter();
+  const [tab, setTab] = useState<Tab>("properties");
+
   const bookingsQuery = useHostBookingsQuery();
   const completeBooking = useCompleteBookingMutation();
   const listingsQuery = useHostListingsQuery();
@@ -29,17 +49,75 @@ export default function HostBookingsPage() {
     completedAmount: 0,
   };
 
+  const vehicleBookingsQuery = useQuery({
+    queryKey: ["hostVehicleBookings"],
+    queryFn: async () => {
+      const data = await getHostVehicleBookings();
+      return data.bookings;
+    },
+  });
+  const vehicleBookings: HostBooking[] = vehicleBookingsQuery.data ?? [];
+
+  const hostVehiclesQuery = useHostVehiclesQuery();
+  const hostVehicles = hostVehiclesQuery.data ?? [];
+  const [selectedVehicleId, setSelectedVehicleId] = useState<number | undefined>(undefined);
+  const [vehicleMonth, setVehicleMonth] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [blockStart, setBlockStart] = useState("");
+  const [blockEnd, setBlockEnd] = useState("");
+  const [blockReason, setBlockReason] = useState("");
+  const [blockError, setBlockError] = useState<string | null>(null);
+
+  const { data: selectedVehicle } = useHostVehicleQuery(selectedVehicleId);
+  const addBlock = useAddVehicleCalendarBlockMutation(selectedVehicleId);
+  const deleteBlock = useDeleteVehicleCalendarBlockMutation(selectedVehicleId);
+
+  const vehicleCalendarBlocks = selectedVehicle?.calendarBlocks ?? [];
+
+  // No vehicle selected means "all of them". Auto-selecting the first car
+  // instead would hide every other car's rentals behind a dropdown the host
+  // has no reason to touch.
+  const vehicleBookingsForSelected = useMemo(
+    () =>
+      selectedVehicleId
+        ? vehicleBookings.filter((b) => b.vehicleId === selectedVehicleId)
+        : vehicleBookings,
+    [vehicleBookings, selectedVehicleId],
+  );
+
+  const vehicleDaysInMonth = useMemo(() => {
+    const [year, monthStr] = vehicleMonth.split("-");
+    const firstDay = new Date(Number(year), Number(monthStr) - 1, 1);
+    const startWeekday = firstDay.getDay();
+    const matrix: Array<{ date: string; currentMonth: boolean }> = [];
+    for (let i = 0; i < 42; i++) {
+      const date = new Date(firstDay);
+      date.setDate(i - startWeekday + 1);
+      matrix.push({ date: formatDate(date), currentMonth: date.getMonth() === firstDay.getMonth() });
+    }
+    return matrix;
+  }, [vehicleMonth]);
+
+  const handleAddBlock = async () => {
+    if (!blockStart || !blockEnd) { setBlockError("Both dates are required."); return; }
+    if (new Date(blockEnd) < new Date(blockStart)) { setBlockError("End date must be after start date."); return; }
+    setBlockError(null);
+    await addBlock.mutateAsync({ startDate: blockStart, endDate: blockEnd, reason: blockReason || undefined });
+    setBlockStart(""); setBlockEnd(""); setBlockReason("");
+  };
+
   const [selectedListingId, setSelectedListingId] = useState<number | undefined>(undefined);
   const [month, setMonth] = useState<string>(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
 
-  useEffect(() => {
-    if (!selectedListingId && listings.length > 0) {
-      setSelectedListingId(listings[0].id);
-    }
-  }, [listings, selectedListingId]);
+  // No auto-select on purpose: defaulting to the first listing silently hid
+  // every booking on every other property, with nothing on screen saying a
+  // filter was applied — bookings looked like they had disappeared. The page
+  // now starts on "All listings" and the host chooses to narrow it.
 
   const { data: blocksData, isLoading: calendarLoading } = useListingCalendarQuery(
     selectedListingId,
@@ -49,10 +127,23 @@ export default function HostBookingsPage() {
     ? (blocksData as ListingCalendarBlock[])
     : [];
 
+  const selectedListing = useMemo(
+    () => listings.find((listing) => listing.id === selectedListingId) ?? null,
+    [listings, selectedListingId],
+  );
+
   const bookingsForListing = useMemo(() => {
-    if (!selectedListingId) return bookings;
-    return bookings.filter((booking) => booking.listingId === selectedListingId);
+    const scoped = selectedListingId
+      ? bookings.filter((booking) => booking.listingId === selectedListingId)
+      : bookings;
+    // Newest first. The API orders by stay date, which buries a booking made
+    // today for a stay next year beneath older reservations starting sooner.
+    return [...scoped].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
   }, [bookings, selectedListingId]);
+
+  const hiddenBookingCount = bookings.length - bookingsForListing.length;
 
   const daysInMonth = useMemo(() => {
     const [year, monthStr] = month.split("-");
@@ -72,6 +163,9 @@ export default function HostBookingsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Time-boxed actions sit above everything else */}
+      <ApprovalQueue />
+
       <section className="rounded-3xl border border-slate-200 bg-white p-6">
         <div className="flex flex-col gap-2 border-b border-slate-100 pb-4">
           <h2 className="text-2xl font-semibold text-slate-900">Bookings overview</h2>
@@ -81,13 +175,22 @@ export default function HostBookingsPage() {
           <div>
             <label className="text-xs font-semibold uppercase text-slate-500">Filter by listing</label>
             <select
-              className="mt-2 w-full rounded-2xl border border-slate-200 p-3 text-sm"
+              className={cn(
+                "mt-2 w-full rounded-2xl border p-3 text-sm transition",
+                selectedListingId
+                  ? "border-primary bg-primary/5 font-medium text-slate-900"
+                  : "border-slate-200",
+              )}
               value={selectedListingId ?? ""}
-              onChange={(event) => setSelectedListingId(Number(event.target.value))}
+              onChange={(e) =>
+                setSelectedListingId(e.target.value ? Number(e.target.value) : undefined)
+              }
             >
+              {/* Without this the host could never get back to a full view */}
+              <option value="">All listings ({bookings.length})</option>
               {listings.map((listing) => (
                 <option key={listing.id} value={listing.id}>
-                  {listing.title}
+                  {listing.title} ({bookings.filter((b) => b.listingId === listing.id).length})
                 </option>
               ))}
             </select>
@@ -108,149 +211,562 @@ export default function HostBookingsPage() {
             <label className="text-xs font-semibold uppercase text-slate-500">Upcoming bookings</label>
             <p className="mt-2 text-3xl font-semibold text-slate-900">
               {bookings.filter(
-                (booking) =>
-                  new Date(booking.startDate) >= new Date() &&
-                  booking.status !== "completed",
+                (b) => new Date(b.startDate) >= new Date() && b.status !== "completed",
               ).length}
             </p>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <Card className="border-slate-200 md:col-span-2">
-          <CardHeader>
-            <CardTitle>Bookings</CardTitle>
-            <p className="text-sm text-slate-500">
-              Recent reservations across your listings. Filter using the dropdown above.
-            </p>
-          </CardHeader>
-          <CardContent className="overflow-auto">
-            {bookingsQuery.isLoading ? (
-              <p className="text-sm text-slate-500">Loading bookings...</p>
-            ) : bookingsForListing.length === 0 ? (
-              <p className="text-sm text-slate-500">No bookings yet.</p>
-            ) : (
-              <table className="w-full text-left text-sm text-slate-600">
-                <thead>
-                  <tr className="text-xs uppercase text-slate-500">
-                    <th className="pb-2">Listing</th>
-                    <th className="pb-2">Guest</th>
-                    <th className="pb-2">Dates</th>
-                    <th className="pb-2">Nights</th>
-                    <th className="pb-2">Status</th>
-                    <th className="pb-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {bookingsForListing.map((booking) => {
-                    const amount = Number(booking.totalAmount ?? 0);
-                    return (
-                      <tr key={booking.id}>
-                      <td className="py-3">
-                        <div className="font-semibold text-slate-900">
-                          {booking.listing?.title ?? `Listing #${booking.listingId}`}
-                        </div>
-                        <p className="text-xs text-slate-500">
-                          {booking.listing?.city}, {booking.listing?.country}
-                        </p>
-                      </td>
-                      <td className="py-3">
-                        <div className="font-semibold text-slate-900">{booking.guestName}</div>
-                        <p className="text-xs text-slate-500">{booking.guestEmail || booking.guestPhone}</p>
-                      </td>
-                      <td className="py-3">
-                        {new Date(booking.startDate).toLocaleDateString()} –{" "}
-                        {new Date(booking.endDate).toLocaleDateString()}
-                      </td>
-                      <td className="py-3">{booking.nights}</td>
-                      <td className="py-3">
-                        <span
+      {/* Tab strip */}
+      <div className="flex gap-2">
+        {(["properties", "vehicles"] as Tab[]).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={cn(
+              "rounded-full px-5 py-1.5 text-xs font-semibold transition",
+              tab === t ? "bg-primary text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+            )}
+          >
+            {t === "properties"
+              ? `Property Bookings (${bookings.length})`
+              : `Car Rentals (${vehicleBookings.length})`}
+          </button>
+        ))}
+      </div>
+
+      {tab === "properties" ? (
+        <section className="grid gap-4 md:grid-cols-3">
+          <Card className="border-slate-200 md:col-span-2">
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <CardTitle>
+                  {selectedListing ? selectedListing.title : "All listings"}
+                </CardTitle>
+                <span className="text-xs text-slate-500">
+                  {bookingsForListing.length} of {bookings.length} bookings
+                </span>
+              </div>
+              {/* The filter has to announce itself here, next to the rows it is
+                  removing — a quiet dropdown elsewhere on the page reads as
+                  "these are all my bookings" when it is not. */}
+              {selectedListing ? (
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                    Filtered to {selectedListing.title}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedListingId(undefined)}
+                      className="rounded-full px-1 text-primary/70 transition hover:text-primary"
+                      aria-label="Show bookings for all listings"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                  {hiddenBookingCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedListingId(undefined)}
+                      className="text-xs text-slate-500 underline-offset-2 hover:underline"
+                    >
+                      {hiddenBookingCount} booking{hiddenBookingCount === 1 ? "" : "s"} on other
+                      listings hidden
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Every reservation across your listings, newest first.
+                </p>
+              )}
+            </CardHeader>
+            <CardContent className="overflow-auto">
+              {bookingsQuery.isLoading ? (
+                <p className="text-sm text-slate-500">Loading bookings...</p>
+              ) : bookingsForListing.length === 0 ? (
+                <p className="text-sm text-slate-500">No bookings yet.</p>
+              ) : (
+                <table className="w-full text-left text-sm text-slate-600">
+                  <thead>
+                    <tr className="text-xs uppercase text-slate-500">
+                      <th className="pb-2">Listing</th>
+                      <th className="pb-2">Guest</th>
+                      <th className="pb-2">Dates</th>
+                      <th className="pb-2">Nights</th>
+                      <th className="pb-2">Status</th>
+                      <th className="pb-2 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {bookingsForListing.map((booking) => {
+                      const amount = Number(booking.totalAmount ?? 0);
+                      return (
+                        <tr
+                          key={booking.id}
+                          onClick={() => router.push(`/host/dashboard/bookings/${booking.id}`)}
+                          className="cursor-pointer transition hover:bg-slate-50"
+                        >
+                          <td className="py-3">
+                            <div className="font-semibold text-slate-900 hover:underline">
+                              {booking.listing?.title ?? `Listing #${booking.listingId}`}
+                            </div>
+                            <p className="text-xs text-slate-500">
+                              {booking.listing?.city}, {booking.listing?.country}
+                            </p>
+                          </td>
+                          <td className="py-3">
+                            <div className="font-semibold text-slate-900">{booking.guestName}</div>
+                            <p className="text-xs text-slate-500">{booking.guestEmail || booking.guestPhone}</p>
+                          </td>
+                          <td className="py-3">
+                            {new Date(booking.startDate).toLocaleDateString()} –{" "}
+                            {new Date(booking.endDate).toLocaleDateString()}
+                          </td>
+                          <td className="py-3">{booking.nights}</td>
+                          <td className="py-3">
+                            <span
+                              className={cn(
+                                "rounded-full px-3 py-1 text-xs font-semibold",
+                                booking.status === "confirmed"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : booking.status === "ongoing"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : booking.status === "pending" ||
+                                    booking.status === "pending_payment" ||
+                                    booking.status === "awaiting_approval"
+                                  ? "bg-amber-100 text-amber-700"
+                                  : "bg-slate-100 text-slate-600",
+                              )}
+                            >
+                              {booking.status === "pending_payment"
+                                ? "awaiting payment"
+                                : booking.status === "awaiting_approval"
+                                ? "needs your answer"
+                                : booking.status}
+                            </span>
+                            <p className="text-xs text-slate-500">
+                              You earn ₦{(booking.hostPayoutAmount ?? 0).toLocaleString()}
+                            </p>
+                            {/* Guest paid more than this: the difference is
+                                Aparte's fee plus any refundable caution fee. */}
+                            <p className="text-[11px] text-slate-400">
+                              Guest paid ₦{amount.toLocaleString()}
+                            </p>
+                            {booking.caution?.awardedToHost ? (
+                              <p className="text-[11px] font-medium text-emerald-700">
+                                + ₦{booking.caution.awardedToHost.toLocaleString()} damage award
+                              </p>
+                            ) : null}
+                            {booking.caution && booking.caution.status === "held" ? (
+                              <p className="text-[11px] text-slate-400">
+                                ₦{booking.caution.amount.toLocaleString()} deposit held by Aparte
+                              </p>
+                            ) : null}
+                          </td>
+                          <td className="py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex flex-col items-end gap-2">
+                              <Button
+                                type="secondary"
+                                className="rounded-2xl px-4 py-1 text-xs"
+                                onClick={() =>
+                                  router.push(`/host/dashboard/messages?bookingId=${booking.id}`)
+                                }
+                              >
+                                Open chat
+                              </Button>
+                              {booking.status === "confirmed" && (
+                                <CheckInControl booking={booking} />
+                              )}
+                              <CheckOutControl booking={booking} />
+                              {booking.status === "confirmed" && (
+                                <button
+                                  type="button"
+                                  className="text-sm font-semibold text-primary hover:underline disabled:opacity-50"
+                                  disabled={completeBooking.isPending}
+                                  onClick={() => completeBooking.mutate(booking.id)}
+                                >
+                                  Mark completed
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </CardContent>
+          </Card>
+          <Card className="border-slate-200">
+            <CardHeader>
+              <CardTitle>Calendar</CardTitle>
+              <p className="text-sm text-slate-500">
+                {selectedListing
+                  ? `${selectedListing.title} — booked days are green, other blocks red.`
+                  : "A calendar belongs to one property."}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* A calendar cannot show every listing at once, so when the
+                  bookings table is unfiltered this asks for a choice rather
+                  than silently showing one property's availability. */}
+              {!selectedListingId ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                  <p className="text-sm font-medium text-slate-700">Pick a listing</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Choose one above to see and manage its availability.
+                  </p>
+                  {listings.length > 0 && (
+                    <div className="mt-3 flex flex-wrap justify-center gap-2">
+                      {listings.slice(0, 4).map((listing) => (
+                        <button
+                          key={listing.id}
+                          type="button"
+                          onClick={() => setSelectedListingId(listing.id)}
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-primary hover:text-primary"
+                        >
+                          {listing.title}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+              <label className="block text-xs font-semibold uppercase text-slate-500">
+                Month
+                <Input
+                  type="month"
+                  className="mt-1"
+                  value={month}
+                  onChange={(e) => setMonth(e.target.value)}
+                />
+              </label>
+              {calendarLoading ? (
+                <p className="text-sm text-slate-500">Loading calendar…</p>
+              ) : (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase text-slate-500">
+                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                      <span key={day}>{day}</span>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-2 text-sm">
+                    {daysInMonth.map(({ date, currentMonth }) => {
+                      const block = blocks.find((b) => isDateBetween(date, b.startDate, b.endDate));
+                      const isBooked = block?.reason?.toLowerCase().startsWith("booked");
+                      return (
+                        <div
+                          key={date}
                           className={cn(
-                            "rounded-full px-3 py-1 text-xs font-semibold",
-                            booking.status === "confirmed"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : booking.status === "pending"
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-slate-100 text-slate-600",
+                            "flex h-16 flex-col items-center justify-center rounded-2xl border",
+                            currentMonth ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50 text-slate-400",
+                            block && "border-rose-200 bg-rose-100 text-rose-800",
+                            isBooked && "border-emerald-200 bg-emerald-100 text-emerald-800",
                           )}
                         >
-                          {booking.status}
-                        </span>
-                        <p className="text-xs text-slate-500">
-                          ₦{amount.toLocaleString()}
-                        </p>
-                      </td>
-                      <td className="py-3 text-right">
-                        {booking.status === "confirmed" && (
+                          <span>{new Date(date).getDate()}</span>
+                          {isBooked && <span className="text-[10px]">Booked</span>}
+                          {!isBooked && block && <span className="text-[10px]">Blocked</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+      ) : (
+        <section className="grid gap-4 md:grid-cols-3">
+          <Card className="border-slate-200 md:col-span-2">
+            <CardHeader>
+              <CardTitle>Car Rentals</CardTitle>
+              <p className="text-sm text-slate-500">Vehicle rental bookings. Select a vehicle to filter and manage its calendar.</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {hostVehicles.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold uppercase text-slate-500">Filter by vehicle</label>
+                  <select
+                    className="mt-2 w-full rounded-2xl border border-slate-200 p-3 text-sm"
+                    value={selectedVehicleId ?? ""}
+                    onChange={(e) =>
+                      setSelectedVehicleId(e.target.value ? Number(e.target.value) : undefined)
+                    }
+                  >
+                    <option value="">All vehicles ({vehicleBookings.length})</option>
+                    {hostVehicles.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.year} {v.make} {v.model} (
+                        {vehicleBookings.filter((b) => b.vehicleId === v.id).length})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {vehicleBookingsQuery.isLoading ? (
+                <p className="text-sm text-slate-500">Loading rentals...</p>
+              ) : vehicleBookingsForSelected.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  {selectedVehicleId
+                    ? "No rentals for this vehicle yet."
+                    : "No car rentals yet."}
+                </p>
+              ) : (
+                <div className="overflow-auto">
+                  <table className="w-full text-left text-sm text-slate-600">
+                    <thead>
+                      <tr className="text-xs uppercase text-slate-500">
+                        <th className="pb-2">Renter</th>
+                        <th className="pb-2">Dates</th>
+                        <th className="pb-2">Days</th>
+                        <th className="pb-2">Status</th>
+                        <th className="pb-2 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {vehicleBookingsForSelected.map((booking) => {
+                        const amount = Number(booking.totalAmount ?? 0);
+                        return (
+                          <tr key={booking.id}>
+                            <td className="py-3">
+                              <div className="font-semibold text-slate-900">{booking.guestName}</div>
+                              {/* Which car this is for — the whole table used to
+                                  omit it, so an "all vehicles" view was unreadable. */}
+                              <p className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                                <Car className="size-3 shrink-0 text-slate-400" />
+                                {bookingSubject(booking)}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {booking.guestEmail || booking.guestPhone || "—"}
+                                {booking.withDriver ? " · With driver" : " · Self-drive"}
+                              </p>
+                            </td>
+                            <td className="py-3 text-xs">
+                              {new Date(booking.startDate).toLocaleDateString()} –{" "}
+                              {new Date(booking.endDate).toLocaleDateString()}
+                            </td>
+                            <td className="py-3">{booking.nights}</td>
+                            <td className="py-3">
+                              <span
+                                className={cn(
+                                  "rounded-full px-3 py-1 text-xs font-semibold",
+                                  booking.status === "confirmed" || booking.status === "ongoing"
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : booking.status === "completed"
+                                    ? "bg-slate-100 text-slate-600"
+                                    : "bg-amber-100 text-amber-700",
+                                )}
+                              >
+                                {booking.status.replace("_", " ")}
+                              </span>
+                              <p className="mt-0.5 text-xs text-slate-500">
+                                You earn ₦{(booking.hostPayoutAmount ?? 0).toLocaleString()}
+                              </p>
+                              <p className="text-[11px] text-slate-400">
+                                Guest paid ₦{amount.toLocaleString()}
+                              </p>
+                              {booking.caution?.awardedToHost ? (
+                                <p className="text-[11px] font-medium text-emerald-700">
+                                  + ₦{booking.caution.awardedToHost.toLocaleString()} damage award
+                                </p>
+                              ) : null}
+                            </td>
+                            {/* A rental needs the same handover controls a stay
+                                has: without these the host can see a paid car
+                                booking but cannot start or finish it. */}
+                            <td className="py-3 text-right">
+                              <div className="flex flex-col items-end gap-2">
+                                <Button
+                                  type="secondary"
+                                  className="rounded-2xl px-4 py-1 text-xs"
+                                  onClick={() =>
+                                    router.push(`/host/dashboard/bookings/${booking.id}`)
+                                  }
+                                >
+                                  View details
+                                </Button>
+                                <Button
+                                  type="secondary"
+                                  className="rounded-2xl px-4 py-1 text-xs"
+                                  onClick={() =>
+                                    router.push(
+                                      `/host/dashboard/messages?bookingId=${booking.id}`,
+                                    )
+                                  }
+                                >
+                                  Open chat
+                                </Button>
+                                {booking.status === "confirmed" && (
+                                  <CheckInControl booking={booking} />
+                                )}
+                                <CheckOutControl booking={booking} />
+                                {booking.status === "confirmed" && (
+                                  <button
+                                    type="button"
+                                    className="text-sm font-semibold text-primary hover:underline disabled:opacity-50"
+                                    disabled={completeBooking.isPending}
+                                    onClick={() => completeBooking.mutate(booking.id)}
+                                  >
+                                    Mark completed
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="space-y-4">
+            <Card className="border-slate-200">
+              <CardHeader>
+                <CardTitle>Calendar</CardTitle>
+                <p className="text-sm text-slate-500">Green = rented · Red = blocked</p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {/* A calendar can only describe one vehicle, so when the table
+                    is showing all of them this asks for a choice rather than
+                    silently rendering the first car's availability. */}
+                {!selectedVehicleId ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                    <p className="text-sm font-medium text-slate-700">Pick a vehicle</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Choose one above to see and manage its availability.
+                    </p>
+                    {hostVehicles.length > 0 && (
+                      <div className="mt-3 flex flex-wrap justify-center gap-2">
+                        {hostVehicles.slice(0, 4).map((v) => (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() => setSelectedVehicleId(v.id)}
+                            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-primary hover:text-primary"
+                          >
+                            {v.make} {v.model}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                <>
+                <label className="block text-xs font-semibold uppercase text-slate-500">
+                  Month
+                  <Input
+                    type="month"
+                    className="mt-1"
+                    value={vehicleMonth}
+                    onChange={(e) => setVehicleMonth(e.target.value)}
+                  />
+                </label>
+                <div className="space-y-2">
+                  <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase text-slate-500">
+                    {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
+                      <span key={d}>{d}</span>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-1 text-sm">
+                    {vehicleDaysInMonth.map(({ date, currentMonth }) => {
+                      const block = vehicleCalendarBlocks.find((b) =>
+                        isDateBetween(date, b.startDate, b.endDate),
+                      );
+                      const isRented = block?.reason?.toLowerCase().startsWith("rented");
+                      return (
+                        <div
+                          key={date}
+                          className={cn(
+                            "flex h-10 flex-col items-center justify-center rounded-xl border text-xs",
+                            currentMonth ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50 text-slate-400",
+                            block && "border-rose-200 bg-rose-100 text-rose-800",
+                            isRented && "border-emerald-200 bg-emerald-100 text-emerald-800",
+                          )}
+                        >
+                          <span>{new Date(date).getDate()}</span>
+                          {isRented && <span className="text-[8px] leading-none">Rented</span>}
+                          {!isRented && block && <span className="text-[8px] leading-none">Blocked</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200">
+              <CardHeader><CardTitle className="text-base">Block dates</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                {blockError && <p className="text-xs text-rose-600">{blockError}</p>}
+                <label className="block space-y-1 text-xs font-semibold text-slate-600">
+                  Start date
+                  <Input type="date" value={blockStart} onChange={(e) => setBlockStart(e.target.value)} />
+                </label>
+                <label className="block space-y-1 text-xs font-semibold text-slate-600">
+                  End date
+                  <Input type="date" value={blockEnd} onChange={(e) => setBlockEnd(e.target.value)} />
+                </label>
+                <label className="block space-y-1 text-xs font-semibold text-slate-600">
+                  Reason (optional)
+                  <Input placeholder="Maintenance, personal use…" value={blockReason} onChange={(e) => setBlockReason(e.target.value)} />
+                </label>
+                <Button
+                  type="primary"
+                  className="w-full rounded-2xl text-sm"
+                  disabled={addBlock.isPending || !selectedVehicleId}
+                  onClick={handleAddBlock}
+                >
+                  {addBlock.isPending ? "Blocking…" : "Block dates"}
+                </Button>
+                {/* Says why the button is dead rather than leaving the host to guess. */}
+                {!selectedVehicleId && (
+                  <p className="text-xs text-slate-500">
+                    Pick a vehicle above to block dates on it.
+                  </p>
+                )}
+
+                {vehicleCalendarBlocks.filter((b) => !b.reason?.toLowerCase().startsWith("rented")).length > 0 && (
+                  <div className="mt-2 space-y-2 border-t border-slate-100 pt-3">
+                    <p className="text-xs font-semibold text-slate-500">Manual blocks</p>
+                    {vehicleCalendarBlocks
+                      .filter((b) => !b.reason?.toLowerCase().startsWith("rented"))
+                      .map((b) => (
+                        <div key={b.id} className="flex items-start justify-between gap-2 text-xs text-slate-600">
+                          <div>
+                            <p className="font-medium">
+                              {new Date(b.startDate).toLocaleDateString()} – {new Date(b.endDate).toLocaleDateString()}
+                            </p>
+                            {b.reason && <p className="text-slate-500">{b.reason}</p>}
+                          </div>
                           <button
                             type="button"
-                            className="text-sm font-semibold text-primary hover:underline disabled:opacity-50"
-                            disabled={completeBooking.isPending}
-                            onClick={() => completeBooking.mutate(booking.id)}
+                            className="shrink-0 text-rose-500 hover:text-rose-700 disabled:opacity-50"
+                            disabled={deleteBlock.isPending}
+                            onClick={() => deleteBlock.mutate(b.id)}
                           >
-                            Mark completed
+                            Remove
                           </button>
-                        )}
-                      </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </CardContent>
-        </Card>
-        <Card className="border-slate-200">
-          <CardHeader>
-            <CardTitle>Calendar</CardTitle>
-            <p className="text-sm text-slate-500">Booked days include naming; other blocks are red.</p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <label className="block text-xs font-semibold uppercase text-slate-500">
-              Month
-              <Input
-                type="month"
-                className="mt-1"
-                value={month}
-                onChange={(event) => setMonth(event.target.value)}
-              />
-            </label>
-            {calendarLoading ? (
-              <p className="text-sm text-slate-500">Loading calendar…</p>
-            ) : (
-              <div className="space-y-2">
-                <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase text-slate-500">
-                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                    <span key={day}>{day}</span>
-                  ))}
-                </div>
-                <div className="grid grid-cols-7 gap-2 text-sm">
-                  {daysInMonth.map(({ date, currentMonth }) => {
-                    const block = blocks.find((block) => isDateBetween(date, block.startDate, block.endDate));
-                    const isBooked = block?.reason?.toLowerCase().startsWith("booked");
-                    return (
-                      <div
-                        key={date}
-                        className={cn(
-                          "flex h-16 flex-col items-center justify-center rounded-2xl border",
-                          currentMonth ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50 text-slate-400",
-                          block && "border-rose-200 bg-rose-100 text-rose-800",
-                          isBooked && "border-emerald-200 bg-emerald-100 text-emerald-800",
-                        )}
-                      >
-                        <span>{new Date(date).getDate()}</span>
-                        {isBooked && <span className="text-[10px]">Booked</span>}
-                        {!isBooked && block && <span className="text-[10px]">Blocked</span>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

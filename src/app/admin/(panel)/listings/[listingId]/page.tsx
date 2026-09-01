@@ -2,26 +2,44 @@
 
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import Button from "@/components/general/Button";
+import { showToast } from "@/components/general/ui/CustomToast";
+import Modal from "@/components/general/ui/modal/Modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   useAdminListingDetailQuery,
+  useApproveHostMutation,
   useApproveListingMutation,
   useRejectListingMutation,
   useRestoreListingMutation,
   useSuspendListingMutation,
+  useUpdateListingCautionFeeMutation,
 } from "@/hooks/admin/use-admin-data";
 
 export default function AdminListingDetailPage() {
   const params = useParams<{ listingId: string }>();
   const listingId = Number(params?.listingId);
   const router = useRouter();
+  const approveHost = useApproveHostMutation();
   const approveListing = useApproveListingMutation();
   const rejectListing = useRejectListingMutation();
   const suspendListing = useSuspendListingMutation();
   const restoreListing = useRestoreListingMutation();
+  const updateCautionFee = useUpdateListingCautionFeeMutation();
+  const [cautionFeeDraft, setCautionFeeDraft] = useState("");
+  const [approveModalOpen, setApproveModalOpen] = useState(false);
+  const [hostApprovalModalOpen, setHostApprovalModalOpen] = useState(false);
   const listingQuery = useAdminListingDetailQuery(listingId);
+  const listingFee = listingQuery.data?.listing?.cautionFee ?? 0;
+
+  useEffect(() => {
+    if (listingQuery.data?.listing) {
+      setCautionFeeDraft(String(listingQuery.data.listing.cautionFee ?? 0));
+    }
+  }, [listingQuery.data?.listing]);
 
   if (Number.isNaN(listingId)) {
     return (
@@ -40,8 +58,35 @@ export default function AdminListingDetailPage() {
   }
 
   const { listing, host } = listingQuery.data;
+  const cautionFeeNumber = Number(cautionFeeDraft);
+  const cautionFeeInvalid =
+    cautionFeeDraft.trim() === "" || Number.isNaN(cautionFeeNumber) || cautionFeeNumber < 0;
+  const cautionFeeDirty = !cautionFeeInvalid && cautionFeeNumber !== listingFee;
+  const approvalSubmitting = updateCautionFee.isPending || approveListing.isPending;
 
-  const handleApprove = () => approveListing.mutate({ listingId: listing.id });
+  const handleApprove = () => {
+    if (host?.adminApprovalStatus && host.adminApprovalStatus !== "approved") {
+      setHostApprovalModalOpen(true);
+      return;
+    }
+    setApproveModalOpen(true);
+  };
+  const handleApproveConfirm = () => {
+    if (cautionFeeInvalid) return;
+    updateCautionFee.mutate(
+      { listingId: listing.id, cautionFee: cautionFeeNumber },
+      {
+        onSuccess: () => {
+          approveListing.mutate(
+            { listingId: listing.id },
+            {
+              onSuccess: () => setApproveModalOpen(false),
+            },
+          );
+        },
+      },
+    );
+  };
 
   const handleReject = () => {
     const reviewNotes = window.prompt("Add optional rejection notes:");
@@ -82,6 +127,10 @@ export default function AdminListingDetailPage() {
               <p>₦{listing.nightlyPrice.toLocaleString()}</p>
             </div>
             <div>
+              <p className="text-xs font-semibold uppercase text-slate-500">Caution fee</p>
+              <p>₦{(listing.cautionFee ?? 0).toLocaleString()}</p>
+            </div>
+            <div>
               <p className="text-xs font-semibold uppercase text-slate-500">Status</p>
               <p>
                 {listing.status === "suspended" &&
@@ -98,6 +147,31 @@ export default function AdminListingDetailPage() {
           <div className="rounded-2xl bg-slate-50 p-3">
             <p className="text-xs uppercase text-slate-500">Review notes</p>
             <p>{listing.reviewNotes ?? "—"}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 p-3">
+            <p className="text-xs uppercase text-slate-500">Update caution fee</p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <input
+                type="number"
+                min="0"
+                className="w-40 rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+                value={cautionFeeDraft}
+                onChange={(event) => setCautionFeeDraft(event.target.value)}
+              />
+              <Button
+                type="secondary"
+                className="rounded-2xl"
+                disabled={updateCautionFee.isPending || cautionFeeInvalid || !cautionFeeDirty}
+                onClick={() =>
+                  updateCautionFee.mutate({ listingId: listing.id, cautionFee: cautionFeeNumber })
+                }
+              >
+                {updateCautionFee.isPending ? "Saving..." : "Save caution fee"}
+              </Button>
+            </div>
+            {cautionFeeInvalid && (
+              <p className="mt-2 text-xs text-rose-600">Enter a valid non-negative amount.</p>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             {listing.status !== "published" && (
@@ -141,6 +215,89 @@ export default function AdminListingDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Modal opened={approveModalOpen} onClose={() => setApproveModalOpen(false)}>
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Approve listing</p>
+            <p className="text-xs text-slate-500">
+              Add a caution fee before publishing · {listing.title}.
+            </p>
+          </div>
+          <label className="block text-sm font-medium text-slate-600">
+            Caution fee
+            <Input
+              type="number"
+              min="0"
+              className="mt-2 rounded-2xl border-slate-200 bg-white"
+              value={cautionFeeDraft}
+              onChange={(event) => setCautionFeeDraft(event.target.value)}
+            />
+          </label>
+          {cautionFeeInvalid && (
+            <p className="text-xs text-rose-600">Enter a valid non-negative amount.</p>
+          )}
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="secondary" className="rounded-2xl" onClick={() => setApproveModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="primary"
+              className="rounded-2xl"
+              disabled={approvalSubmitting || cautionFeeInvalid}
+              onClick={handleApproveConfirm}
+            >
+              {approvalSubmitting ? "Approving..." : "Save & approve"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+      <Modal opened={hostApprovalModalOpen} onClose={() => setHostApprovalModalOpen(false)}>
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Approve host first</p>
+            <p className="text-xs text-slate-500">
+              {host?.fullName ?? host?.email ?? `Landlord #${listing.hostId}`} must be approved
+              before this listing can be published.
+            </p>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="secondary" className="rounded-2xl" onClick={() => setHostApprovalModalOpen(false)}>
+              Close
+            </Button>
+            <Button
+              type="secondary"
+              className="rounded-2xl"
+              disabled={approveHost.isPending}
+              onClick={() => {
+                if (!host?.id) return;
+                approveHost.mutate(
+                  { hostId: host.id },
+                  {
+                    onSuccess: () => {
+                      showToast.success("Host approved. Add the caution fee to publish the listing.");
+                      setHostApprovalModalOpen(false);
+                      setApproveModalOpen(true);
+                    },
+                  },
+                );
+              }}
+            >
+              {approveHost.isPending ? "Approving host..." : "Approve host"}
+            </Button>
+            <Button
+              type="primary"
+              className="rounded-2xl"
+              onClick={() => {
+                setHostApprovalModalOpen(false);
+                router.push("/admin/hosts");
+              }}
+            >
+              Go to host approvals
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {listing.photos.length > 0 && (
         <Card className="border-slate-200">

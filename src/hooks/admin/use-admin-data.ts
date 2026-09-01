@@ -4,7 +4,15 @@ import {
   approveHost,
   approveListing,
   approvePayoutRequest,
+  claimCautionDeposit,
   completeAdminBooking,
+  getCautionDeposits,
+  createBreakfastOption,
+  getBreakfastOptions,
+  updateBreakfastOption,
+  getPendingIdentityVerifications,
+  reviewIdentityVerification,
+  resolveCautionDeposit,
   getAdminAuditLogs,
   getAdminAccounts,
   getAdminBookings,
@@ -23,6 +31,7 @@ import {
   restoreListing,
   suspendHost,
   suspendListing,
+  updateListingCautionFee,
   updateAdminBookingNotes,
   updateAdminBookingStatus,
 } from "@/lib/api-client";
@@ -168,6 +177,18 @@ export const useRestoreListingMutation = () => {
   });
 };
 
+export const useUpdateListingCautionFeeMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ listingId, cautionFee }: { listingId: number; cautionFee: number }) =>
+      updateListingCautionFee(listingId, cautionFee),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: adminListingsQueryKey });
+      queryClient.invalidateQueries({ queryKey: ["admin", "listing", variables.listingId] });
+    },
+  });
+};
+
 export const useInviteAdminMutation = () =>
   useMutation({
     mutationFn: inviteAdminRequest,
@@ -237,3 +258,86 @@ export const useAdminLogoutMutation = () =>
   useMutation({
     mutationFn: logoutAdminRequest,
   });
+
+// ── Caution deposits (escrow) ────────────────────────────────────────────────
+
+export const adminCautionDepositsQueryKey = ["admin", "cautionDeposits"];
+
+export const adminBreakfastQueryKey = ["admin", "breakfast-options"];
+
+export const useBreakfastOptionsQuery = () =>
+  useQuery({ queryKey: adminBreakfastQueryKey, queryFn: getBreakfastOptions });
+
+export const useCreateBreakfastOptionMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createBreakfastOption,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminBreakfastQueryKey }),
+  });
+};
+
+export const useUpdateBreakfastOptionMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: Record<string, unknown> }) =>
+      updateBreakfastOption(id, patch),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminBreakfastQueryKey }),
+  });
+};
+
+export const adminIdentityQueryKey = ["admin", "identity", "pending"];
+
+export const useIdentityVerificationsQuery = () =>
+  useQuery({
+    queryKey: adminIdentityQueryKey,
+    queryFn: getPendingIdentityVerifications,
+  });
+
+export const useReviewIdentityMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      verificationId,
+      decision,
+      rejectionReason,
+    }: {
+      verificationId: number;
+      decision: "approved" | "rejected";
+      rejectionReason?: string;
+    }) => reviewIdentityVerification(verificationId, decision, rejectionReason),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminIdentityQueryKey }),
+  });
+};
+
+export const useCautionDepositsQuery = (status?: string) =>
+  useQuery({
+    queryKey: [...adminCautionDepositsQueryKey, status ?? "all"],
+    queryFn: () => getCautionDeposits(status),
+  });
+
+export const useClaimCautionDepositMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bookingId, reason }: { bookingId: number; reason: string }) =>
+      claimCautionDeposit(bookingId, reason),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: adminCautionDepositsQueryKey }),
+  });
+};
+
+export const useResolveCautionDepositMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      bookingId,
+      amountToHost,
+      notes,
+    }: {
+      bookingId: number;
+      amountToHost: number;
+      notes?: string;
+    }) => resolveCautionDeposit(bookingId, amountToHost, notes),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: adminCautionDepositsQueryKey }),
+  });
+};

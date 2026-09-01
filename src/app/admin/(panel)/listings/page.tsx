@@ -5,14 +5,17 @@ import { useRouter } from "next/navigation";
 
 import Button from "@/components/general/Button";
 import Modal from "@/components/general/ui/modal/Modal";
+import { showToast } from "@/components/general/ui/CustomToast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   useAdminListingsQuery,
+  useApproveHostMutation,
   useApproveListingMutation,
   useRejectListingMutation,
   useRestoreListingMutation,
   useSuspendListingMutation,
+  useUpdateListingCautionFeeMutation,
 } from "@/hooks/admin/use-admin-data";
 import { cn } from "@/lib/utils";
 
@@ -34,14 +37,29 @@ const listingStatusChip = (status: string) => {
 export default function AdminListingsPage() {
   const router = useRouter();
   const listingsQuery = useAdminListingsQuery();
+  const approveHost = useApproveHostMutation();
   const approveListing = useApproveListingMutation();
   const rejectListing = useRejectListingMutation();
   const suspendListing = useSuspendListingMutation();
   const restoreListing = useRestoreListingMutation();
+  const updateCautionFee = useUpdateListingCautionFeeMutation();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [rejectModalListing, setRejectModalListing] = useState<{ id: number; title: string } | null>(null);
+  const [approveModalListing, setApproveModalListing] = useState<{
+    id: number;
+    title: string;
+    cautionFee: number;
+  } | null>(null);
+  const [hostApprovalModal, setHostApprovalModal] = useState<{
+    listingId: number;
+    hostId: number;
+    hostName: string;
+    listingTitle: string;
+    cautionFee: number;
+  } | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
+  const [cautionFeeDraft, setCautionFeeDraft] = useState("");
   const rejectingListingId =
     rejectListing.isPending && rejectListing.variables ? rejectListing.variables.listingId : null;
   const modalSubmitting = Boolean(
@@ -66,6 +84,13 @@ export default function AdminListingsPage() {
     setRejectModalListing(null);
     setReviewNotes("");
   };
+  const closeApproveModal = () => {
+    setApproveModalListing(null);
+    setCautionFeeDraft("");
+  };
+  const closeHostApprovalModal = () => {
+    setHostApprovalModal(null);
+  };
   const confirmReject = () => {
     if (!rejectModalListing) return;
     rejectListing.mutate(
@@ -80,6 +105,32 @@ export default function AdminListingsPage() {
       },
     );
   };
+  const confirmApprove = () => {
+    if (!approveModalListing) return;
+    const cautionFeeValue = Number(cautionFeeDraft);
+    if (Number.isNaN(cautionFeeValue) || cautionFeeValue < 0) {
+      return;
+    }
+    updateCautionFee.mutate(
+      { listingId: approveModalListing.id, cautionFee: cautionFeeValue },
+      {
+        onSuccess: () => {
+          approveListing.mutate(
+            { listingId: approveModalListing.id },
+            {
+              onSuccess: () => {
+                closeApproveModal();
+              },
+            },
+          );
+        },
+      },
+    );
+  };
+  const cautionFeeNumber = Number(cautionFeeDraft);
+  const cautionFeeInvalid =
+    cautionFeeDraft.trim() === "" || Number.isNaN(cautionFeeNumber) || cautionFeeNumber < 0;
+  const approvalSubmitting = updateCautionFee.isPending || approveListing.isPending;
 
   return (
     <div className="space-y-6">
@@ -168,7 +219,8 @@ export default function AdminListingsPage() {
                               {entry.listing.city ?? "Unknown"}, {entry.listing.country ?? "—"}
                             </p>
                             <p className="text-xs text-slate-500">
-                              ₦{entry.listing.nightlyPrice.toLocaleString()} per night
+                              ₦{entry.listing.nightlyPrice.toLocaleString()} per night · Caution ₦
+                              {(entry.listing.cautionFee ?? 0).toLocaleString()}
                             </p>
                           </td>
                           <td className="py-3">
@@ -217,9 +269,25 @@ export default function AdminListingsPage() {
                                   disabled={isApprovingCurrent}
                                   onClick={(event) => {
                                     event.stopPropagation();
-                                    approveListing.mutate({
-                                      listingId: entry.listing.id,
+                                    if (entry.host?.adminApprovalStatus !== "approved") {
+                                      setHostApprovalModal({
+                                        listingId: entry.listing.id,
+                                        hostId: entry.host?.id ?? entry.listing.hostId,
+                                        hostName:
+                                          entry.host?.fullName ??
+                                          entry.host?.email ??
+                                          `Landlord #${entry.listing.hostId}`,
+                                        listingTitle: entry.listing.title,
+                                        cautionFee: entry.listing.cautionFee ?? 0,
+                                      });
+                                      return;
+                                    }
+                                    setApproveModalListing({
+                                      id: entry.listing.id,
+                                      title: entry.listing.title,
+                                      cautionFee: entry.listing.cautionFee ?? 0,
                                     });
+                                    setCautionFeeDraft(String(entry.listing.cautionFee ?? 0));
                                   }}
                                 >
                                   {isApprovingCurrent ? "Approving..." : "Approve"}
@@ -284,6 +352,95 @@ export default function AdminListingsPage() {
           )}
         </CardContent>
       </Card>
+      <Modal opened={Boolean(approveModalListing)} onClose={closeApproveModal}>
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Approve listing</p>
+            <p className="text-xs text-slate-500">
+              Add a caution fee before publishing
+              {approveModalListing ? ` · ${approveModalListing.title}` : ""}.
+            </p>
+          </div>
+          <label className="block text-sm font-medium text-slate-600">
+            Caution fee
+            <Input
+              type="number"
+              min="0"
+              className="mt-2 rounded-2xl border-slate-200 bg-white"
+              value={cautionFeeDraft}
+              onChange={(event) => setCautionFeeDraft(event.target.value)}
+            />
+          </label>
+          {cautionFeeInvalid && (
+            <p className="text-xs text-rose-600">Enter a valid non-negative amount.</p>
+          )}
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="secondary" className="rounded-2xl" onClick={closeApproveModal}>
+              Cancel
+            </Button>
+            <Button
+              type="primary"
+              className="rounded-2xl"
+              disabled={approvalSubmitting || cautionFeeInvalid}
+              onClick={confirmApprove}
+            >
+              {approvalSubmitting ? "Approving..." : "Save & approve"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+      <Modal opened={Boolean(hostApprovalModal)} onClose={closeHostApprovalModal}>
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Approve host first</p>
+            <p className="text-xs text-slate-500">
+              {hostApprovalModal
+                ? `${hostApprovalModal.hostName} must be approved before listing #${hostApprovalModal.listingId} can be published.`
+                : "The host must be approved before publishing this listing."}
+            </p>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="secondary" className="rounded-2xl" onClick={closeHostApprovalModal}>
+              Close
+            </Button>
+            <Button
+              type="secondary"
+              className="rounded-2xl"
+              disabled={approveHost.isPending}
+              onClick={() => {
+                if (!hostApprovalModal) return;
+                approveHost.mutate(
+                  { hostId: hostApprovalModal.hostId },
+                  {
+                    onSuccess: () => {
+                      showToast.success("Host approved. Add the caution fee to publish the listing.");
+                      setApproveModalListing({
+                        id: hostApprovalModal.listingId,
+                        title: hostApprovalModal.listingTitle,
+                        cautionFee: hostApprovalModal.cautionFee,
+                      });
+                      setCautionFeeDraft(String(hostApprovalModal.cautionFee));
+                      closeHostApprovalModal();
+                    },
+                  },
+                );
+              }}
+            >
+              {approveHost.isPending ? "Approving host..." : "Approve host"}
+            </Button>
+            <Button
+              type="primary"
+              className="rounded-2xl"
+              onClick={() => {
+                closeHostApprovalModal();
+                router.push("/admin/hosts");
+              }}
+            >
+              Go to host approvals
+            </Button>
+          </div>
+        </div>
+      </Modal>
       <Modal opened={Boolean(rejectModalListing)} onClose={closeRejectModal}>
         <div className="space-y-4 text-slate-800">
           <div className="space-y-1">

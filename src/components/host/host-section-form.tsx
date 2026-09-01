@@ -5,12 +5,16 @@ import { Controller, useForm } from "react-hook-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Button from "@/components/general/Button";
 import { Input } from "@/components/ui/input";
+import AddressPicker from "@/components/general/form/AddressPicker";
+import type { ResolvedPlace } from "@/lib/api-client";
 import PhoneInput from "@/components/general/form/PhoneInput";
 import type { HostOnboardingStep, HostProfile } from "@/types/host";
 import { useUpdateHostProfileMutation } from "@/hooks/use-host-profile";
 import { cn } from "@/lib/utils";
 
-type FieldType = "text" | "email" | "tel" | "textarea";
+// "place" renders the AddressPicker and contributes a googlePlaceId to the
+// payload rather than a text value of its own.
+type FieldType = "text" | "email" | "tel" | "textarea" | "place";
 
 export type HostSectionField = {
   name: keyof HostProfile;
@@ -41,10 +45,37 @@ type SectionFormValues = Record<string, string>;
 export const HostSectionForm = ({ config, profile }: HostSectionFormProps) => {
   const { mutateAsync, isPending } = useUpdateHostProfileMutation();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [selectedPlace, setSelectedPlace] = useState<ResolvedPlace | null>(null);
+
+  const placeField = config.fields.find((field) => field.type === "place");
+
+  // Rebuild the picker from the stored profile. A profile saved before the
+  // picker existed has no googlePlaceId, so the host must re-pick.
+  useEffect(() => {
+    if (!placeField) return;
+    setSelectedPlace(
+      profile.googlePlaceId
+        ? {
+            placeId: profile.googlePlaceId,
+            formattedAddress:
+              profile.formattedAddress ??
+              [profile.addressLine1, profile.city, profile.country].filter(Boolean).join(", "),
+            latitude: null,
+            longitude: null,
+            addressLine1: profile.addressLine1 ?? "",
+            city: profile.city ?? "",
+            state: profile.state ?? "",
+            country: profile.country ?? "",
+            postalCode: profile.postalCode ?? "",
+          }
+        : null
+    );
+  }, [placeField, profile]);
 
   const defaultValues = useMemo(() => {
     const values: SectionFormValues = {};
     config.fields.forEach((field) => {
+      if (field.type === "place") return;
       const rawValue = profile[field.name];
       if (Array.isArray(rawValue)) {
         values[field.name] = rawValue.join(", ");
@@ -108,6 +139,16 @@ export const HostSectionForm = ({ config, profile }: HostSectionFormProps) => {
         return [key, value];
       }),
     );
+
+    if (placeField) {
+      if (!selectedPlace) {
+        setSubmitError("Please pick your address from the suggestions.");
+        return;
+      }
+      // Only the place id travels; the backend derives addressLine1, city,
+      // state, country and postal code from it.
+      normalized.googlePlaceId = selectedPlace.placeId;
+    }
 
     await mutateAsync({
       section: config.apiSection,
@@ -196,12 +237,22 @@ export const HostSectionForm = ({ config, profile }: HostSectionFormProps) => {
             return (
               <label key={field.name as string} className="block space-y-2">
                 <span className="font-medium">{field.label}</span>
-                <Input
-                  type={field.type ?? "text"}
-                  placeholder={field.placeholder}
-                  required={field.required}
-                  {...register(field.name as string, { required: field.required })}
-                />
+                {field.type === "place" ? (
+                  <AddressPicker
+                    label=""
+                    required={field.required}
+                    placeholder={field.placeholder}
+                    value={selectedPlace}
+                    onChange={setSelectedPlace}
+                  />
+                ) : (
+                  <Input
+                    type={field.type ?? "text"}
+                    placeholder={field.placeholder}
+                    required={field.required}
+                    {...register(field.name as string, { required: field.required })}
+                  />
+                )}
                 {field.helperText && (
                   <p className="text-xs text-slate-500">{field.helperText}</p>
                 )}

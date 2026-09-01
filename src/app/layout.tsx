@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { PostHogProvider } from "@/components/providers/posthog-provider";
+import CustomToast from "@/components/general/ui/CustomToast";
+import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://aparte.com"
-  ),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://aparte.com"),
   title: "Aparte",
   description: "Aparte helps you find and manage places you can call home.",
   openGraph: {
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
     siteName: "Aparte",
     images: [
       {
-        url: "/aparte-logo.png",
+        url: "/icon.png",
         width: 400,
         height: 231,
         alt: "Aparte logo",
@@ -29,8 +30,8 @@ export const metadata: Metadata = {
     images: ["/aparte-logo.png"],
   },
   icons: {
-    icon: "/aparte-logo.png",
-    apple: "/aparte-logo.png",
+    icon: "/icon.png",
+    apple: "/apple-icon.png",
   },
 };
 
@@ -40,9 +41,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className="antialiased">
-        <QueryProvider>{children}</QueryProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body className="antialiased" suppressHydrationWarning>
+        <PostHogProvider>
+          <QueryProvider>
+            {children}
+            <CustomToast />
+          </QueryProvider>
+        </PostHogProvider>
+        <Toaster richColors position="top-right" />
       </body>
     </html>
   );

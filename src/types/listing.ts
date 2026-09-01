@@ -2,6 +2,24 @@ import type { HostOnboardingStatus } from "./host";
 
 export type ListingStatus = "draft" | "pending_review" | "published" | "suspended";
 
+export type ListingCategory =
+  | "apartment" | "studio" | "loft" | "duplex" | "penthouse"
+  | "villa" | "cottage" | "bungalow" | "townhouse" | "beach_house" | "mansion";
+
+export const LISTING_CATEGORIES: { value: ListingCategory; label: string }[] = [
+  { value: "apartment", label: "Apartment" },
+  { value: "studio", label: "Studio" },
+  { value: "loft", label: "Loft" },
+  { value: "duplex", label: "Duplex" },
+  { value: "penthouse", label: "Penthouse" },
+  { value: "villa", label: "Villa" },
+  { value: "cottage", label: "Cottage" },
+  { value: "bungalow", label: "Bungalow" },
+  { value: "townhouse", label: "Townhouse" },
+  { value: "beach_house", label: "Beach House" },
+  { value: "mansion", label: "Mansion" },
+];
+
 export type ListingPhoto = {
   id: number;
   key: string;
@@ -29,6 +47,7 @@ export type HostListing = {
   id: number;
   hostId: number;
   title: string;
+  category: ListingCategory | null;
   description: string;
   summary: string;
   addressLine1: string;
@@ -37,12 +56,26 @@ export type HostListing = {
   state: string;
   country: string;
   postalCode: string;
-  latitude: string;
-  longitude: string;
+  // Numeric since the coordinate columns became numeric(10,7); null when the
+  // listing has no resolved place yet. Never '' — an empty string was never a
+  // coordinate.
+  latitude: number | null;
+  longitude: number | null;
+  /** Stable Places identifier; null on listings predating the address picker. */
+  googlePlaceId: string | null;
+  /** Google's canonical one-line address, for display. */
+  formattedAddress: string | null;
   nightlyPrice: number;
   currency: string;
   cleaningFee: number;
+  /**
+   * @deprecated Host-set service fees were retired when Aparte moved to a split
+   * fee. The guest-facing service fee is now computed per booking from the
+   * nightly rate; this column only still holds values on legacy listings.
+   */
   serviceFee: number;
+  /** Set by admins, held in escrow by Aparte, refunded to the guest. */
+  cautionFee: number;
   maxGuests: number;
   bedrooms: number;
   bathrooms: number;
@@ -54,6 +87,8 @@ export type HostListing = {
   weeklyDiscountPercent: number;
   monthlyDiscountPercent: number;
   status: ListingStatus;
+  /** Number of Explore clips attached — see /hosts/listings/:id/explore-posts. */
+  explorePosts?: { id: number; url: string; sortOrder: number }[];
   reviewNotes: string;
   publishedAt: string | null;
   createdAt: string;
@@ -67,7 +102,10 @@ export type HostListingDetail = HostListing & {
 
 export type HostBooking = {
   id: number;
-  listingId: number;
+  listingId: number | null;
+  vehicleId: number | null;
+  withDriver: boolean;
+  driverFee: number;
   hostId: number;
   guestName: string;
   guestEmail: string;
@@ -77,6 +115,44 @@ export type HostBooking = {
   nights: number;
   status: string;
   totalAmount: number;
+  accommodationAmount: number;
+  passThroughAmount: number;
+  guestServiceFee: number;
+  cautionAmount: number;
+  netOfRefundable: number;
+  /** ISO deadline. After this the booking confirms without the host acting. */
+  approvalDueAt: string | null;
+  approvedAt: string | null;
+  approvedBy: "host" | "auto" | null;
+  declinedAt: string | null;
+  declineReason: string | null;
+  /**
+   * Whether a check-in code exists — deliberately not the code itself. The host
+   * redeems it at handover; being able to read it would defeat the point.
+   */
+  hasCheckInCode: boolean;
+  checkedInAt: string | null;
+  checkedInByType: "host" | "admin" | null;
+  /**
+   * Departure code — same asymmetry as the arrival code. The host learns only
+   * that one is outstanding; a host who could read it could mark a guest gone
+   * without them ever being there.
+   */
+  hasCheckOutCode: boolean;
+  checkedOutAt: string | null;
+  checkedOutByType: "host" | "admin" | null;
+  /** What the host actually earns on this booking, after commission. */
+  hostCommission: number;
+  hostPayoutAmount: number;
+  /**
+   * Escrow outcome. `awardedToHost` is real host earnings that sits outside the
+   * booking payout, so it has to be added separately when totalling revenue.
+   */
+  caution: {
+    amount: number;
+    status: "held" | "claimed" | "released" | "awarded" | "cancelled";
+    awardedToHost: number;
+  } | null;
   notes: string;
   createdAt: string;
   listing?: {
@@ -84,6 +160,14 @@ export type HostBooking = {
     title: string;
     city: string;
     country: string;
+  };
+  vehicle?: {
+    id: number | null;
+    make: string;
+    model: string;
+    year: number;
+    pickupCity: string;
+    pickupCountry: string;
   };
 };
 

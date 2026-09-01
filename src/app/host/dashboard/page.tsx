@@ -28,11 +28,6 @@ const quickActions = [
     description: "Keep response times high and delight new inquiries.",
     href: "/host/dashboard/messages",
   },
-  {
-    title: "Test booking flow",
-    description: "Open the simulator to create demo bookings and advance statuses.",
-    href: "/test-booking",
-  },
 ];
 
 const listingStats = [
@@ -65,7 +60,16 @@ export default function HostDashboardPage() {
     const { bookings } = bookingsQuery.data;
     const completed = bookings.filter((booking) => booking.status === "completed");
     const total = completed.length;
-    const revenue = completed.reduce((sum, booking) => sum + (booking.totalAmount ?? 0), 0);
+    // What the host actually earns, not what the guest paid. totalAmount is the
+    // gross charge — it includes Aparte's service fee and the refundable caution
+    // fee, neither of which is the host's money, so summing it overstated
+    // revenue badly. Damage awards released from escrow are real earnings and
+    // sit outside the booking payout, so they are added here.
+    const revenue = completed.reduce(
+      (sum, booking) =>
+        sum + (booking.hostPayoutAmount ?? 0) + (booking.caution?.awardedToHost ?? 0),
+      0,
+    );
     const active = bookings.filter(
       (booking) =>
         booking.status === "confirmed" ||
@@ -76,10 +80,86 @@ export default function HostDashboardPage() {
     return { completed: total, totalBookings: bookings.length, revenue, active };
   }, [bookingsQuery.data]);
 
+
+  /**
+   * Replaces three hardcoded tips shown to every host forever under the
+   * heading "key insights for your portfolio". Advice that never changes and
+   * never refers to your account is noise dressed as insight, and it filled
+   * the space where something actionable belonged.
+   *
+   * Declared above the loading and error returns: every hook has to run in
+   * the same order on every render, and putting a useMemo after an early
+   * return changes the hook count between the loading pass and the loaded
+   * one. React catches it at runtime; the typechecker does not.
+   */
+  const attentionItems = useMemo(() => {
+    const items: { label: string; detail: string; href: string }[] = [];
+    if (!data) return items;
+
+    const drafts =
+      listingsData?.filter((listing) => listing.status === "draft").length ?? 0;
+    if (drafts > 0) {
+      items.push({
+        label: `${drafts} listing${drafts === 1 ? "" : "s"} still in draft`,
+        detail: "Guests cannot see a listing until it is submitted and approved.",
+        href: "/host/dashboard/listings",
+      });
+    }
+    if ((data.payoutStatus ?? "pending") !== "active" || !data.payoutBankName) {
+      items.push({
+        label: "Payout details incomplete",
+        detail: "We cannot send your earnings until a bank account is verified.",
+        href: "/host/dashboard/payouts",
+      });
+    }
+    if (!data.supportPhone) {
+      items.push({
+        label: "No support phone number",
+        detail: "Guests with an urgent problem have no way to reach you.",
+        href: "/host/dashboard/profile#support",
+      });
+    }
+    if (completedStats.active > 0) {
+      items.push({
+        label: `${completedStats.active} guest${completedStats.active === 1 ? "" : "s"} currently staying`,
+        detail: "Keep an eye on messages while they are in your property.",
+        href: "/host/dashboard/bookings",
+      });
+    }
+    return items;
+  }, [data, listingsData, completedStats.active]);
+
   if (isLoading) {
+    const Block = ({ className = "" }: { className?: string }) => (
+      <div className={`animate-pulse rounded-lg bg-slate-200 ${className}`} />
+    );
     return (
-      <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-500">
-        Loading your landlord overview...
+      <div className="space-y-6">
+        <div className="grid gap-4 md:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6"
+            >
+              <Block className="h-4 w-32" />
+              <Block className="h-3 w-44" />
+              <Block className="h-9 w-20" />
+            </div>
+          ))}
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {[0, 1].map((i) => (
+            <div
+              key={i}
+              className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6"
+            >
+              <Block className="h-4 w-36" />
+              {[0, 1, 2].map((r) => (
+                <Block key={r} className="h-14 w-full" />
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -87,9 +167,10 @@ export default function HostDashboardPage() {
   if (isError || !data) {
     return (
       <div className="space-y-4 rounded-3xl border border-red-200 bg-red-50 p-8 text-sm text-red-700">
-        <p>We couldn’t load your landlord data.</p>
+        <p className="font-medium">We couldn’t load your dashboard.</p>
         <p className="text-xs">
-          {error instanceof Error ? error.message : "Unexpected error"}
+          This is usually a connection problem. Try again, and if it keeps
+          happening, contact support and we will look into it.
         </p>
         <Button
           type="primary"
@@ -131,6 +212,8 @@ export default function HostDashboardPage() {
     listingsData?.filter((listing) => listing.status === "published").length ?? 0;
   const draftListingCount =
     listingsData?.filter((listing) => listing.status === "draft").length ?? 0;
+
+
 
   return (
     <div className="space-y-8">
@@ -210,6 +293,17 @@ export default function HostDashboardPage() {
                   <p className="text-2xl font-semibold text-slate-900">
                     ₦{completedStats.revenue.toLocaleString()}
                   </p>
+                  {/*
+                    Bookings taken before the split-fee model carry no payout
+                    figure, so a host with completed stays can legitimately see
+                    zero here. Saying why beats a bare ₦0 next to a non-zero
+                    booking count, which reads as the dashboard being broken.
+                  */}
+                  {completedStats.revenue === 0 && completedStats.completed > 0 && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Earnings tracking started after these stays completed.
+                    </p>
+                  )}
                 </div>
                 <p className="text-sm text-slate-600">
                   Completed bookings:{" "}
@@ -277,15 +371,37 @@ export default function HostDashboardPage() {
             </Card>
             <Card className="border-slate-200">
               <CardHeader>
-                <CardTitle>Performance notes</CardTitle>
+                <CardTitle>Needs your attention</CardTitle>
                 <p className="text-sm text-slate-500">
-                  Key insights and reminders for your portfolio.
+                  Things only you can action, from your account right now.
                 </p>
               </CardHeader>
-              <CardContent className="space-y-3 text-sm text-slate-600">
-                <p>Keep response time under 1 hour to boost booking conversions.</p>
-                <p>Schedule post-stay cleaning reminders every Friday.</p>
-                <p>Offer weekly discounts to improve mid-week occupancy.</p>
+              <CardContent className="space-y-2 text-sm">
+                {attentionItems.length === 0 ? (
+                  <p className="text-slate-600">
+                    Nothing needs your attention. Your listings are live and your
+                    account is complete.
+                  </p>
+                ) : (
+                  attentionItems.map((item) => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={() => router.push(item.href)}
+                      className="flex w-full items-start justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2.5 text-left transition-colors hover:border-slate-300 hover:bg-slate-50"
+                    >
+                      <span>
+                        <span className="block font-medium text-slate-900">
+                          {item.label}
+                        </span>
+                        <span className="block text-xs text-slate-500">{item.detail}</span>
+                      </span>
+                      <span className="shrink-0 pt-0.5 text-xs font-semibold text-primary">
+                        Go
+                      </span>
+                    </button>
+                  ))
+                )}
               </CardContent>
             </Card>
           </section>

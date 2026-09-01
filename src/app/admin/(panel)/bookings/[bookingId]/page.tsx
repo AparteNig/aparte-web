@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 
 import Button from "@/components/general/Button";
+import AdminCheckIn from "@/components/admin/AdminCheckIn";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   useAdminBookingsQuery,
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 const BOOKING_STATUS_OPTIONS = [
   "pending",
+  "awaiting_approval",
   "confirmed",
   "ongoing",
   "checkout_due",
@@ -65,17 +67,27 @@ export default function AdminBookingDetailPage() {
   }
 
   const { booking, listing, host } = row;
-  const amount = (booking.totalAmount ?? 0) / 100;
+  // Stored in naira, not kobo — dividing by 100 showed ₦25,400 as ₦254
+  const amount = booking.totalAmount ?? 0;
 
   return (
     <div className="space-y-6">
-      <Button
-        type="secondary"
-        className="rounded-2xl"
-        onClick={() => router.push("/admin/bookings")}
-      >
-        ← Back to bookings
-      </Button>
+      <div className="flex flex-wrap gap-3">
+        <Button
+          type="secondary"
+          className="rounded-2xl"
+          onClick={() => router.push("/admin/bookings")}
+        >
+          ← Back to bookings
+        </Button>
+        <Button
+          type="primary"
+          className="rounded-2xl"
+          onClick={() => router.push(`/admin/messages?bookingId=${booking.id}`)}
+        >
+          Open chat
+        </Button>
+      </div>
 
       <Card className="border-slate-200">
         <CardHeader>
@@ -149,6 +161,12 @@ export default function AdminBookingDetailPage() {
                 Mark completed + payout
               </Button>
             )}
+          </div>
+
+          {/* Guests read their code out on arrival; admins redeem it here when
+              the host isn't the one doing the handover. */}
+          <div className="mt-4">
+            <AdminCheckIn bookingId={booking.id} status={booking.status} />
           </div>
         </CardContent>
       </Card>

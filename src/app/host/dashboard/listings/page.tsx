@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 
 import { Input } from "@/components/ui/input";
+import AddressPicker from "@/components/general/form/AddressPicker";
+import ZonePriceGuidance from "@/components/host/zone-price-guidance";
+import type { ResolvedPlace } from "@/lib/api-client";
 import Button from "@/components/general/Button";
 import LoadingOverlay from "@/components/general/LoadingOverlay";
 import Modal from "@/components/general/ui/modal/Modal";
@@ -17,18 +20,22 @@ import {
   useMoveListingToDraftMutation,
   usePublishListingMutation,
 } from "@/hooks/use-host-listings";
-import type { HostListing } from "@/types/listing";
+import type { HostListing, ListingCategory } from "@/types/listing";
+import { LISTING_CATEGORIES } from "@/types/listing";
 import { cn } from "@/lib/utils";
 import PillMultiSelect from "@/components/general/form/PillMultiSelect";
 
 type ListingFormValues = {
   title: string;
+  category: ListingCategory | "";
   description: string;
   addressLine1: string;
   city: string;
   country: string;
   nightlyPrice: string;
   maxGuests: string;
+  bedrooms: string;
+  bathrooms: string;
   amenities: string[];
   houseRules: string[];
   newListingPromotionPercent: string;
@@ -38,12 +45,15 @@ type ListingFormValues = {
 
 const initialFormValues: ListingFormValues = {
   title: "",
+  category: "",
   description: "",
   addressLine1: "",
   city: "",
   country: "Nigeria",
   nightlyPrice: "",
   maxGuests: "1",
+  bedrooms: "1",
+  bathrooms: "1",
   amenities: [],
   houseRules: [],
   newListingPromotionPercent: "0",
@@ -103,14 +113,18 @@ export default function HostListingsPage() {
   const draftListing = useMoveListingToDraftMutation();
   const deleteListing = useDeleteListingMutation();
 
-  const { register, control, handleSubmit, reset, watch } = useForm<ListingFormValues>({
+  const { register, control, handleSubmit, reset, watch, setValue } = useForm<ListingFormValues>({
     defaultValues: initialFormValues,
   });
   const [attachments, setAttachments] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [listingToDelete, setListingToDelete] = useState<{ id: number; title: string } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [selectedPlace, setSelectedPlace] = useState<ResolvedPlace | null>(null);
 
+  // Watched so price guidance re-reads as the host types, not only on save.
+  const watchedBedrooms = watch("bedrooms");
+  const watchedNightlyPrice = watch("nightlyPrice");
   const newListingPromotionValue = watch("newListingPromotionPercent") ?? "0";
   const weeklyDiscountValue = watch("weeklyDiscountPercent") ?? "0";
   const monthlyDiscountValue = watch("monthlyDiscountPercent") ?? "0";
@@ -130,18 +144,27 @@ export default function HostListingsPage() {
     try {
       setFormError(null);
       const formData = new FormData();
+      if (!selectedPlace) {
+        setFormError("Please pick the property address from the suggestions.");
+        return;
+      }
       const baseFields: Array<keyof ListingFormValues> = [
         "title",
         "description",
-        "addressLine1",
-        "city",
-        "country",
         "nightlyPrice",
         "maxGuests",
+        "bedrooms",
+        "bathrooms",
       ];
       baseFields.forEach((field) => {
         formData.append(field, String(values[field] ?? ""));
       });
+      // Only the place id travels; the backend re-resolves it and derives
+      // addressLine1, city, state, country and postal code.
+      formData.set("googlePlaceId", selectedPlace.placeId);
+      if (values.category) {
+        formData.append("category", values.category);
+      }
       if (values.amenities.length > 0) {
         formData.set("amenities", JSON.stringify(values.amenities));
       }
@@ -154,6 +177,7 @@ export default function HostListingsPage() {
       attachments.forEach((file) => formData.append("listingFiles", file));
       await createListing.mutateAsync(formData);
       reset(initialFormValues);
+      setSelectedPlace(null);
       setAttachments([]);
       setShowCreateForm(false);
     } catch (error) {
@@ -256,6 +280,22 @@ export default function HostListingsPage() {
                     {...register("title", { required: true })}
                   />
                 </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-semibold text-slate-800">
+                    Category <span className="text-rose-500">*</span>
+                  </span>
+                  <select
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    {...register("category", { required: true })}
+                  >
+                    <option value="">Select a category</option>
+                    {LISTING_CATEGORIES.map((cat) => (
+                      <option key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <label className="space-y-2 text-sm md:col-span-2">
                   <span className="font-semibold text-slate-800">Description</span>
                   <textarea
@@ -265,21 +305,16 @@ export default function HostListingsPage() {
                     {...register("description", { required: true })}
                   />
                 </label>
-                <label className="space-y-2 text-sm">
-                  <span className="font-semibold text-slate-800">Address line 1</span>
-                  <Input
-                    placeholder="1 Admiralty Way"
-                    {...register("addressLine1", { required: true })}
+                {/* City and country are derived from the picked place server-side. */}
+                <div className="md:col-span-2">
+                  <AddressPicker
+                    label="Address"
+                    required
+                    placeholder="Start typing the property address…"
+                    value={selectedPlace}
+                    onChange={setSelectedPlace}
                   />
-                </label>
-                <label className="space-y-2 text-sm">
-                  <span className="font-semibold text-slate-800">City</span>
-                  <Input placeholder="Lagos" {...register("city", { required: true })} />
-                </label>
-                <label className="space-y-2 text-sm">
-                  <span className="font-semibold text-slate-800">Country</span>
-                  <Input placeholder="Nigeria" {...register("country", { required: true })} />
-                </label>
+                </div>
                 <label className="space-y-2 text-sm">
                   <span className="font-semibold text-slate-800">Nightly price</span>
                   <Input
@@ -288,10 +323,24 @@ export default function HostListingsPage() {
                     placeholder="40000"
                     {...register("nightlyPrice", { required: true })}
                   />
+                  <ZonePriceGuidance
+                    latitude={selectedPlace?.latitude}
+                    longitude={selectedPlace?.longitude}
+                    bedrooms={Number(watchedBedrooms) || 0}
+                    nightlyPrice={Number(watchedNightlyPrice) || null}
+                  />
                 </label>
                 <label className="space-y-2 text-sm">
                   <span className="font-semibold text-slate-800">Max guests</span>
                   <Input type="number" min="1" {...register("maxGuests", { required: true })} />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-semibold text-slate-800">Bedrooms</span>
+                  <Input type="number" min="1" {...register("bedrooms", { required: true })} />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-semibold text-slate-800">Bathrooms</span>
+                  <Input type="number" min="1" {...register("bathrooms", { required: true })} />
                 </label>
                 <div className="space-y-2 text-sm md:col-span-2">
                   <Controller
@@ -473,7 +522,11 @@ export default function HostListingsPage() {
                   <div className="flex flex-col gap-1">
                     <CardTitle>{listing.title}</CardTitle>
                     <p className="text-sm text-slate-500">
-                      {listing.city}, {listing.country} · ₦{listing.nightlyPrice.toLocaleString()}
+                      {listing.category && (
+                        <span className="capitalize">{listing.category.replace("_", " ")} · </span>
+                      )}
+                      {listing.city}, {listing.country} · ₦{listing.nightlyPrice.toLocaleString()} ·
+                      Caution ₦{(listing.cautionFee ?? 0).toLocaleString()}
                     </p>
                   </div>
                   <span

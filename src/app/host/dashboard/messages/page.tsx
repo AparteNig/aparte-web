@@ -1,11 +1,36 @@
+"use client";
+
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+
+import ChatPanel from "@/components/messaging/chat-panel";
+import { getAuthCookie, HOST_AUTH_COOKIE } from "@/lib/auth";
+
+const HostMessagesContent = () => {
+  const [token, setToken] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const bookingIdParam = searchParams.get("bookingId");
+  const bookingId = bookingIdParam ? Number(bookingIdParam) : undefined;
+
+  useEffect(() => {
+    setToken(getAuthCookie(HOST_AUTH_COOKIE));
+  }, []);
+
+  return (
+    // ChatPanel renders its own header, so the page no longer repeats one —
+    // there were previously two competing titles stacked above the list.
+    <ChatPanel
+      token={token}
+      title="Guest messages"
+      initialBookingId={Number.isNaN(bookingId) ? undefined : bookingId}
+    />
+  );
+};
+
 export default function HostMessagesPage() {
   return (
-    <div className="space-y-4">
-      <h2 className="text-2xl font-semibold">Guest messages</h2>
-      <p className="text-slate-600">Reply quickly and keep response times high.</p>
-      <div className="rounded-2xl border border-slate-200 p-6 text-sm text-slate-500">
-        Messaging workspace placeholder.
-      </div>
-    </div>
+    <Suspense fallback={<div className="text-sm text-slate-500">Loading messages...</div>}>
+      <HostMessagesContent />
+    </Suspense>
   );
 }

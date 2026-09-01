@@ -44,6 +44,7 @@ export type AdminListingRow = {
     country: string | null;
     status: string;
     nightlyPrice: number;
+    cautionFee: number;
     reviewNotes: string | null;
     updatedAt: string;
     createdAt: string;
@@ -53,6 +54,7 @@ export type AdminListingRow = {
     email: string;
     fullName: string | null;
     onboardingStatus: string;
+    adminApprovalStatus: "pending" | "approved" | "rejected";
   } | null;
 };
 
@@ -64,7 +66,10 @@ export type AdminListingDetail = {
 export type AdminBookingRow = {
   booking: {
     id: number;
-    listingId: number;
+    listingId: number | null;
+    vehicleId: number | null;
+    withDriver: boolean;
+    driverFee: number;
     hostId: number;
     guestName: string;
     guestEmail: string | null;
@@ -81,6 +86,12 @@ export type AdminBookingRow = {
     id: number;
     title: string | null;
   } | null;
+  vehicle: {
+    id: number;
+    make: string;
+    model: string;
+    year: number;
+  } | null;
   host: {
     id: number;
     email: string | null;
@@ -93,7 +104,12 @@ export type AdminPayoutRequest = {
   hostId: number;
   amount: number;
   currency: string;
-  status: "pending" | "approved" | "rejected" | "paid" | "failed";
+  status: "pending" | "processing" | "approved" | "rejected" | "paid" | "failed";
+  payoutBankName: string | null;
+  payoutBankCode: string | null;
+  payoutAccountName: string | null;
+  payoutAccountNumber: string | null;
+  payoutRoutingNumber: string | null;
   reason: string | null;
   adminNotes: string | null;
   approvedByAdminId: number | null;
