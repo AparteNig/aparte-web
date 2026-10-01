@@ -152,7 +152,12 @@ export type RegistrationOtpResponse = {
   devPreview?: string;
 };
 
-export const registerHost = (payload: { email: string; phone: string; password: string }) =>
+export const registerHost = (payload: {
+  email: string;
+  phone: string;
+  password: string;
+  isOwner: boolean;
+}) =>
   apiFetch<{ hostProfile: HostProfile } & RegistrationOtpResponse>("/auth/hosts/register", {
     method: "POST",
     body: JSON.stringify(payload),

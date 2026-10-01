@@ -9,6 +9,7 @@ import { EmailIcon, EyeIcon, EyeOffIcon, LockIcon } from "@/assets/icons";
 import Button from "@/components/general/Button";
 import InputField from "@/components/general/form/InputField";
 import PhoneInput from "@/components/general/form/PhoneInput";
+import RadioButton from "@/components/general/form/RadioButton";
 import PageFooter from "@/components/general/PageFooter";
 import { AuthLayout } from "@/components/layouts/auth-layout";
 import { AuthHeader } from "@/components/pages/auth/auth-header";
@@ -18,6 +19,8 @@ type HostSignupFields = {
   email: string;
   phone: string;
   password: string;
+  // Radio values are strings; mapped to the API's isOwner boolean on submit.
+  relationship: "owner" | "manager" | "";
 };
 
 export default function HostSignupPage() {
@@ -32,7 +35,7 @@ export default function HostSignupPage() {
     handleSubmit,
     formState: { errors },
   } = useForm<HostSignupFields>({
-    defaultValues: { email: "", phone: "", password: "" },
+    defaultValues: { email: "", phone: "", password: "", relationship: "" },
   });
 
   const signupMutation = useMutation({
@@ -41,6 +44,7 @@ export default function HostSignupPage() {
         email: payload.email,
         phone: payload.phone,
         password: payload.password,
+        isOwner: payload.relationship === "owner",
       }),
     onSuccess: (_data, variables) => {
       setError(null);
@@ -135,6 +139,28 @@ export default function HostSignupPage() {
               {...register("password", { required: "Password is required" })}
               error={errors.password?.message}
             />
+            <fieldset className="flex flex-col gap-3">
+              <legend className="mb-3 text-sm font-medium text-slate-700">
+                Do you own the property you&apos;re listing?
+              </legend>
+              <RadioButton
+                id="relationship-owner"
+                label="Yes, I own it"
+                value="owner"
+                {...register("relationship", {
+                  required: "Tell us whether you own or manage the property",
+                })}
+              />
+              <RadioButton
+                id="relationship-manager"
+                label="No, I manage it for the owner"
+                value="manager"
+                {...register("relationship", {
+                  required: "Tell us whether you own or manage the property",
+                })}
+                error={errors.relationship?.message}
+              />
+            </fieldset>
             <Button
               type="primary"
               buttonType="submit"
