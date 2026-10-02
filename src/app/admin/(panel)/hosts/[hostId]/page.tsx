@@ -85,7 +85,7 @@ export default function AdminHostDetailPage() {
             <div>
               <p className="text-xs font-semibold uppercase text-slate-500">Location</p>
               <p>
-                {host.city ?? "Unknown"}, {host.country ?? "—"}
+                {[host.city, host.country].filter(Boolean).join(", ") || "Unknown"}
               </p>
             </div>
             <div>

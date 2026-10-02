@@ -168,7 +168,7 @@ export default function AdminHostsPage() {
                       <td className="py-3">
                       <div className="font-semibold text-slate-900">{host.fullName ?? host.email}</div>
                       <p className="text-xs text-slate-500">
-                        {host.city ?? "Unknown"}, {host.country ?? "—"}
+                        {[host.city, host.country].filter(Boolean).join(", ") || "Unknown"}
                       </p>
                       <p className="text-xs text-slate-500">{host.email}</p>
                     </td>

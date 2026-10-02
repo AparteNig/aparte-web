@@ -22,7 +22,10 @@ import { cn } from "@/lib/utils";
 import type { ListingCalendarBlock } from "@/types/listing";
 import type { VehicleCalendarBlock } from "@/types/vehicle";
 
-const formatDate = (date: Date) => date.toISOString().split("T")[0];
+// Local calendar day, not toISOString(): in Lagos (UTC+1) local midnight is
+// 23:00 the previous day in UTC, which shifted every cell back by one.
+const formatDate = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
 const isDateBetween = (date: string, start: string, end: string) => {
   const target = new Date(date).getTime();
@@ -333,7 +336,7 @@ export default function HostCalendarPage() {
                       isSelected && "border-primary bg-primary/20 font-semibold text-primary",
                     )}
                   >
-                    <span>{new Date(date).getDate()}</span>
+                    <span>{Number(date.slice(8, 10))}</span>
                     {hasBlock && (
                       <span className="text-[10px]">
                         {isTaken ? (mode === "vehicles" ? "Rented" : "Booked") : "Blocked"}

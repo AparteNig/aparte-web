@@ -34,6 +34,7 @@ const Button: React.FC<ButtonProps> = ({
   loading = false,
   buttonType = "button",
   title,
+  ariaLabel,
   onClick,
   onMouseEnter,
   onMouseLeave,
@@ -72,7 +73,8 @@ const Button: React.FC<ButtonProps> = ({
   return (
     <button
       type={buttonType}
-      aria-label={title ?? "ISDS"}
+      title={title}
+      aria-label={ariaLabel}
       {...props}
       {...eventHandlers}
       disabled={disabled || loading}

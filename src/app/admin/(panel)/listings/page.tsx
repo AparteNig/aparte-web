@@ -216,7 +216,7 @@ export default function AdminListingsPage() {
                           <td className="py-3">
                             <div className="font-semibold text-slate-900">{entry.listing.title}</div>
                             <p className="text-xs text-slate-500">
-                              {entry.listing.city ?? "Unknown"}, {entry.listing.country ?? "—"}
+                              {[entry.listing.city, entry.listing.country].filter(Boolean).join(", ") || "Unknown"}
                             </p>
                             <p className="text-xs text-slate-500">
                               ₦{entry.listing.nightlyPrice.toLocaleString()} per night · Caution ₦

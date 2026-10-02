@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 
 import Link from "next/link";
-import Button from "@/components/general/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAdminAccountsQuery, useAdminProfileQuery } from "@/hooks/admin/use-admin-data";
@@ -12,6 +11,18 @@ export default function AdminAccountsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const profileQuery = useAdminProfileQuery(true);
   const adminsQuery = useAdminAccountsQuery(profileQuery.data?.isSuperAdmin ?? false);
+  // Above the early returns: a hook after them ran only once the profile had
+  // loaded, which React rejects as a change in hook order and crashes on.
+  const admins = useMemo(() => {
+    if (!adminsQuery.data) return [];
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return adminsQuery.data;
+    return adminsQuery.data.filter((admin) =>
+      [admin.email, admin.fullName, admin.role]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(term)),
+    );
+  }, [adminsQuery.data, searchTerm]);
 
   if (profileQuery.isLoading) {
     return <p className="text-sm text-slate-500">Checking permissions…</p>;
@@ -29,17 +40,6 @@ export default function AdminAccountsPage() {
       </Card>
     );
   }
-
-  const admins = useMemo(() => {
-    if (!adminsQuery.data) return [];
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return adminsQuery.data;
-    return adminsQuery.data.filter((admin) =>
-      [admin.email, admin.fullName, admin.role]
-        .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(term)),
-    );
-  }, [adminsQuery.data, searchTerm]);
 
   return (
     <div className="space-y-6">
@@ -105,10 +105,11 @@ export default function AdminAccountsPage() {
           </p>
         </CardHeader>
         <CardContent>
-          <Link href="/admin/add-admin">
-            <Button type="secondary" className="rounded-2xl">
-              Invite new admin
-            </Button>
+          <Link
+            href="/admin/add-admin"
+            className="inline-block rounded-2xl border-2 border-gray-200 px-6 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+          >
+            Invite new admin
           </Link>
         </CardContent>
       </Card>

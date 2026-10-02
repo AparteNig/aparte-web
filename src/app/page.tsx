@@ -725,7 +725,7 @@ export default function Home() {
                   className={`${poppins.className} flex items-center gap-3 text-center text-[28px] font-semibold text-[#434A48]`}
                 >
                   <span className="h-px flex-1 bg-[#2A3130]" />
-                  Frequently Asked Question
+                  Frequently Asked Questions
                   <span className="h-px flex-1 bg-[#2A3130]" />
                 </div>
                 <div className="mt-6 space-y-3">
@@ -935,10 +935,21 @@ export default function Home() {
           </div>
           <div className="space-y-3 text-xs text-slate-500">
             <p className="text-sm font-semibold text-slate-700">Company</p>
-            <p>About us</p>
-            <p>Services</p>
-            <p>Blog</p>
-            <p>Promos</p>
+            <p>
+              <a href="#about" className="transition-colors hover:text-primary">
+                About us
+              </a>
+            </p>
+            <p>
+              <a href="#explore" className="transition-colors hover:text-primary">
+                Explore
+              </a>
+            </p>
+            <p>
+              <Link href="/host/signup" className="transition-colors hover:text-primary">
+                Become a host
+              </Link>
+            </p>
           </div>
           <div className="space-y-3 text-xs text-slate-500">
             <p className="text-sm font-semibold text-slate-700">Support</p>
@@ -974,15 +985,21 @@ export default function Home() {
           </div>
           <div className="space-y-3 text-xs text-slate-500">
             <p className="text-sm font-semibold text-slate-700">Contact</p>
-            <p>Address of company</p>
-            <p>Phone numbers</p>
-            <p>Email address</p>
+            <p>{COMPANY.address}</p>
+            <p>
+              <a
+                href={`mailto:${COMPANY.emails.support}`}
+                className="transition-colors hover:text-primary"
+              >
+                {COMPANY.emails.support}
+              </a>
+            </p>
           </div>
         </div>
         <div
           className={`${inriaSerif.className} mt-1 flex flex-col items-center gap-2 py-4 text-[16px] text-[#343434] md:flex-row md:justify-center md:gap-4`}
         >
-          <p>Aparte@2026. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Aparte. All rights reserved.</p>
           <span aria-hidden className="hidden text-[#B5B5B5] md:inline">
             |
           </span>

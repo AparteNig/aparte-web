@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import SharePage, { type Fact } from "@/components/share/SharePage";
-import { getPublicListing } from "@/lib/public-content";
+import { getPublicListing, primaryPhotoUrl } from "@/lib/public-content";
 import { formatNaira, shareImageUrl, shareUrl } from "@/lib/share";
 
 type Props = { params: Promise<{ id: string }> };
@@ -37,13 +37,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     listing.summary?.trim() ||
     listing.description?.trim()?.slice(0, 200) ||
     `${formatNaira(listing.nightlyPrice)} per night on Aparte.`;
-  const image = shareImageUrl("listing", listing.id);
-  const url = shareUrl("listing", listing.id);
+  const image = shareImageUrl("listing", listing.publicId);
+  const url = shareUrl("listing", listing.publicId);
 
   return {
     title: `${title} | Aparte`,
     description,
-    alternates: { canonical: `/listing/${listing.id}` },
+    alternates: { canonical: `/listing/${listing.publicId}` },
     openGraph: {
       type: "website",
       url,
@@ -70,6 +70,10 @@ export default async function ListingSharePage({ params }: Props) {
   // probe for the existence of a draft.
   if (!listing) notFound();
 
+  // Links shared before opaque ids existed carry the numeric id. They keep
+  // working, but land on the opaque URL so it is the one that gets re-shared.
+  if (id !== listing.publicId) permanentRedirect(`/listing/${listing.publicId}`);
+
   const facts: Fact[] = [
     { label: "Guests", value: String(listing.maxGuests ?? "—") },
     { label: "Bedrooms", value: String(listing.bedrooms ?? "—") },
@@ -84,13 +88,13 @@ export default async function ListingSharePage({ params }: Props) {
       location={locationOf(listing)}
       priceLabel={formatNaira(listing.nightlyPrice)}
       priceUnit="per night"
-      imageUrl={shareImageUrl("listing", listing.id)}
+      imageUrl={primaryPhotoUrl(listing.photos) ? shareImageUrl("listing", listing.publicId) : null}
       description={listing.summary?.trim() || listing.description}
       facts={facts}
       amenities={listing.amenities}
       rating={listing.avgRating}
       reviewCount={listing.reviewCount}
-      url={shareUrl("listing", listing.id)}
+      url={shareUrl("listing", listing.publicId)}
     />
   );
 }

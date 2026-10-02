@@ -59,7 +59,7 @@ export default function AdminAuditLogsPage() {
                         <p className="text-xs text-slate-500">Admin #{entry.adminId ?? "—"}</p>
                       </td>
                       <td className="py-3 text-xs text-slate-500">
-                        {entry.targetType ?? "—"} · {entry.targetId ?? "n/a"}
+                        {entry.targetType ? `${entry.targetType} · ${entry.targetId ?? "n/a"}` : "n/a"}
                       </td>
                       <td className="py-3 text-xs text-slate-500">
                         <pre className="max-w-md whitespace-pre-wrap break-words rounded-2xl bg-slate-50 p-2 text-[11px] text-slate-600">

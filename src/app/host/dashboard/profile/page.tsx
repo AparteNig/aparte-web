@@ -9,6 +9,7 @@ import {
   HostSectionForm,
 } from "@/components/host/host-section-form";
 import HostIdentitySection from "@/components/host/host-identity-section";
+import HostPayoutSection from "@/components/host/host-payout-section";
 import { useHostProfileQuery } from "@/hooks/use-host-profile";
 import Button from "@/components/general/Button";
 import { cn } from "@/lib/utils";
@@ -88,16 +89,9 @@ const PROFILE_SECTIONS: HostSectionConfig[] = [
     title: "Payout account",
     description: "Where Paystack should deposit your payouts.",
     stepKey: "PAYOUT_DETAILS",
-    fields: [
-      { name: "payoutBankName", label: "Bank name", required: true },
-      { name: "payoutBankCode", label: "Bank code", required: true },
-      { name: "payoutAccountName", label: "Account name", required: true },
-      { name: "payoutAccountNumber", label: "Account number", required: true },
-      {
-        name: "payoutRoutingNumber",
-        label: "Routing/reference (optional)",
-      },
-    ],
+    // Rendered by HostPayoutSection: the bank comes from Paystack's list and
+    // the account name is resolved, not typed.
+    fields: [],
   },
   {
     id: "support",
@@ -202,6 +196,8 @@ export default function HostProfilePage() {
               <div key={section.id} id={section.id}>
                 <HostLanguagePicker profile={data} />
               </div>
+            ) : section.id === "payout" ? (
+              <HostPayoutSection key={section.id} profile={data} />
             ) : section.id === "kyc" ? (
               <div key={section.id} id={section.id}>
                 <HostIdentitySection hostId={data.id} />

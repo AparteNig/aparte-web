@@ -49,19 +49,22 @@ export const AuthLayout = ({
         scrolls beside it.
       */}
       <aside className="relative hidden h-screen w-[46vw] shrink-0 self-start overflow-hidden bg-primary md:sticky md:top-0 md:block">
-        <Image
-          src={HERO_IMAGE}
-          alt="A furnished Aparté apartment"
-          fill
-          sizes="46vw"
-          priority
-          /*
+        {/* Positioned wrapper: next/image `fill` rejects a sticky parent. */}
+        <div className="absolute inset-0">
+          <Image
+            src={HERO_IMAGE}
+            alt="A furnished Aparté apartment"
+            fill
+            sizes="46vw"
+            priority
+            /*
             Biased downward. A landscape interior cropped into a tall panel
             centres on the ceiling — the least interesting third of any room
             photograph — so the crop is pulled toward the living space.
           */
-          className="object-cover object-[center_72%]"
-        />
+            className="object-cover object-[center_72%]"
+          />
+        </div>
         {/*
           Two overlays, not one. The flat tint keeps the brand colour present
           across the whole panel; the bottom gradient is what actually makes
@@ -82,8 +85,8 @@ export const AuthLayout = ({
               Your apartments, earning while you sleep.
             </h1>
             <p className="text-[15px] leading-relaxed text-white/75">
-              Listings, bookings, guest messages and payouts — in one place, built for
-              Lagos landlords.
+              Listings, bookings, guest messages and payouts in one place, built for Lagos
+              landlords.
             </p>
           </div>
         </div>

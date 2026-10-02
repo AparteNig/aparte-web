@@ -119,7 +119,7 @@ export default function AdminListingDetailPage() {
             <div>
               <p className="text-xs font-semibold uppercase text-slate-500">Location</p>
               <p>
-                {listing.city ?? "Unknown"}, {listing.country ?? "—"}
+                {[listing.city, listing.country].filter(Boolean).join(", ") || "Unknown"}
               </p>
             </div>
             <div>

@@ -30,23 +30,17 @@ const quickActions = [
   },
 ];
 
-const listingStats = [
-  {
-    label: "Active listings",
-    value: "—",
-    helper: "Launch your first listing to see live stats.",
-  },
-  {
-    label: "Drafts",
-    value: "—",
-    helper: "Save progress as you work through onboarding.",
-  },
-  {
-    label: "Pending review",
-    value: "—",
-    helper: "Submit listings for compliance review.",
-  },
-];
+// Plain-language names for the onboarding steps, and the profile tab each one
+// is completed on.
+const STEP_COPY: Record<string, { label: string; tab: string }> = {
+  PROFILE_INFO: { label: "Profile basics", tab: "identity" },
+  IDENTITY_UPLOAD: { label: "Identity verification", tab: "kyc" },
+  ADDRESS_VERIFIED: { label: "Operating address", tab: "address" },
+  BUSINESS_DETAILS: { label: "Business details", tab: "business" },
+  PAYOUT_DETAILS: { label: "Payout account", tab: "payout" },
+  SUPPORT_CONTACT: { label: "Guest support contact", tab: "support" },
+  LISTING_PUBLISHED: { label: "Publish your first listing", tab: "" },
+};
 
 export default function HostDashboardPage() {
   const router = useRouter();
@@ -212,6 +206,26 @@ export default function HostDashboardPage() {
     listingsData?.filter((listing) => listing.status === "published").length ?? 0;
   const draftListingCount =
     listingsData?.filter((listing) => listing.status === "draft").length ?? 0;
+  const pendingListingCount =
+    listingsData?.filter((listing) => listing.status === "pending_review").length ?? 0;
+  const listingStats = [
+    {
+      label: "Active listings",
+      value: activeListingCount,
+      helper: "Live and bookable in the app.",
+    },
+    {
+      label: "Drafts",
+      value: draftListingCount,
+      helper: "Save progress as you work through onboarding.",
+    },
+    {
+      label: "Pending review",
+      value: pendingListingCount,
+      helper: "Waiting for an Aparte reviewer.",
+    },
+  ];
+  const stepsLeft = totalSteps - completedSteps;
 
 
 
@@ -325,8 +339,8 @@ export default function HostDashboardPage() {
                     {data.payoutStatus ?? "pending"}
                   </p>
                   <p className="text-xs text-slate-500">
-                    Bank: {data.payoutBankName || "—"} · Account:{" "}
-                    {data.payoutAccountNumber || "—"}
+                    Bank: {data.payoutBankName || "Not set"} · Account:{" "}
+                    {data.payoutAccountNumber || "Not set"}
                   </p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 p-3">
@@ -427,8 +441,8 @@ export default function HostDashboardPage() {
                   </span>
                 </p>
                 <p className="text-xs text-slate-500">
-                  {totalSteps - completedSteps} steps remaining. Finish setup to unlock
-                  payouts.
+                  {stepsLeft} {stepsLeft === 1 ? "step" : "steps"} remaining. Finish setup
+                  to unlock payouts.
                 </p>
                 <Button
                   type="secondary"
@@ -443,7 +457,7 @@ export default function HostDashboardPage() {
               <CardHeader>
                 <CardTitle>Listings at a glance</CardTitle>
                 <p className="text-sm text-slate-500">
-                  Data will display once your first listing is published.
+                  Where each of your listings stands.
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -467,8 +481,8 @@ export default function HostDashboardPage() {
                     {data.payoutStatus ?? "pending"}
                   </p>
                   <p className="text-xs text-slate-500">
-                    Bank: {data.payoutBankName || "—"} · Account:{" "}
-                    {data.payoutAccountNumber || "—"}
+                    Bank: {data.payoutBankName || "Not set"} · Account:{" "}
+                    {data.payoutAccountNumber || "Not set"}
                   </p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 p-3">
@@ -500,16 +514,22 @@ export default function HostDashboardPage() {
                 ) : (
                   <ol className="space-y-3">
                     {data.incompleteSteps.slice(0, 4).map((step) => (
-                      <li
-                        key={step}
-                        className="rounded-2xl border border-slate-200 p-3 text-sm"
-                      >
-                        <p className="font-semibold">
-                          {step.replaceAll("_", " ").toLowerCase()}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          Complete this on the profile page.
-                        </p>
+                      <li key={step}>
+                        <Link
+                          href={
+                            step === "LISTING_PUBLISHED"
+                              ? "/host/dashboard/listings"
+                              : `/host/dashboard/profile#${STEP_COPY[step]?.tab ?? ""}`
+                          }
+                          className="block rounded-2xl border border-slate-200 p-3 text-sm transition hover:border-primary/40 hover:bg-slate-50"
+                        >
+                          <p className="font-semibold">{STEP_COPY[step]?.label ?? step}</p>
+                          <p className="text-xs text-slate-500">
+                            {step === "LISTING_PUBLISHED"
+                              ? "Submit a listing for review from the listings page."
+                              : "Complete this on the profile page."}
+                          </p>
+                        </Link>
                       </li>
                     ))}
                   </ol>

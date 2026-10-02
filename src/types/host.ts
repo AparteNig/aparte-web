@@ -43,6 +43,8 @@ export type HostProfile = {
   avatarUrl: string | null;
   businessName: string;
   taxId: string;
+  /** Owns the listed properties, rather than managing them for someone else. */
+  isOwner: boolean;
   payoutBankName: string;
   payoutBankCode: string;
   payoutAccountName: string;

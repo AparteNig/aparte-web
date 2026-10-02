@@ -185,6 +185,22 @@ export default function HostListingsPage() {
         error instanceof Error ? error.message : "Failed to create listing. Try again.",
       );
     }
+  }, (invalid) => {
+    // The inputs carry no inline messages, so name what is missing rather
+    // than leaving the button looking broken.
+    const labels: Partial<Record<keyof ListingFormValues, string>> = {
+      title: "title",
+      category: "category",
+      description: "description",
+      nightlyPrice: "nightly price",
+      maxGuests: "max guests",
+      bedrooms: "bedrooms",
+      bathrooms: "bathrooms",
+    };
+    const missing = (Object.keys(invalid) as Array<keyof ListingFormValues>)
+      .map((key) => labels[key] ?? key)
+      .join(", ");
+    setFormError(`Please fill in: ${missing}.`);
   });
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {

@@ -161,8 +161,8 @@ export default function SharePage({
           </h2>
           <p className="mx-auto mt-2 max-w-md text-[#fdfbf7]/80">
             {kind === "vehicle"
-              ? "Reserve this car, message the owner and pick up with a code — all in the app."
-              : "Reserve this place, message the host and check in with a code — all in the app."}
+              ? "Reserve this car, message the owner and pick up with a code, all in the app."
+              : "Reserve this place, message the host and check in with a code, all in the app."}
           </p>
           <Link
             href="/"

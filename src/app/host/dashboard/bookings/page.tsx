@@ -25,7 +25,10 @@ import CheckOutControl from "@/components/host/CheckOutDialog";
 import { Car } from "lucide-react";
 import { bookingSubject } from "@/lib/booking-display";
 
-const formatDate = (date: Date) => date.toISOString().split("T")[0];
+// Local calendar day, not toISOString(): in Lagos (UTC+1) local midnight is
+// 23:00 the previous day in UTC, which shifted every cell back by one.
+const formatDate = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const isDateBetween = (date: string, start: string, end: string) => {
   const target = new Date(date).getTime();
   return target >= new Date(start).getTime() && target <= new Date(end).getTime();
@@ -468,7 +471,7 @@ export default function HostBookingsPage() {
                             isBooked && "border-emerald-200 bg-emerald-100 text-emerald-800",
                           )}
                         >
-                          <span>{new Date(date).getDate()}</span>
+                          <span>{Number(date.slice(8, 10))}</span>
                           {isBooked && <span className="text-[10px]">Booked</span>}
                           {!isBooked && block && <span className="text-[10px]">Blocked</span>}
                         </div>
@@ -693,7 +696,7 @@ export default function HostBookingsPage() {
                             isRented && "border-emerald-200 bg-emerald-100 text-emerald-800",
                           )}
                         >
-                          <span>{new Date(date).getDate()}</span>
+                          <span>{Number(date.slice(8, 10))}</span>
                           {isRented && <span className="text-[8px] leading-none">Rented</span>}
                           {!isRented && block && <span className="text-[8px] leading-none">Blocked</span>}
                         </div>

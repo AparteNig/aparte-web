@@ -117,7 +117,7 @@ export default function AdminDashboardPage() {
                   <tr key={entry.id}>
                     <td className="py-2 font-semibold text-slate-900">{entry.action}</td>
                     <td className="py-2 text-xs text-slate-500">
-                      {entry.targetType ?? "—"} · {entry.targetId ?? "n/a"}
+                      {entry.targetType ? `${entry.targetType} · ${entry.targetId ?? "n/a"}` : "n/a"}
                     </td>
                     <td className="py-2 text-xs text-slate-500">
                       Admin #{entry.adminId ?? "—"}
