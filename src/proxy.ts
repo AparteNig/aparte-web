@@ -1,12 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ADMIN_AUTH_COOKIE, HOST_AUTH_COOKIE } from "./src/lib/auth";
+import { ADMIN_AUTH_COOKIE, HOST_AUTH_COOKIE } from "@/lib/auth";
 
 const isAdminRoute = (pathname: string) => pathname.startsWith("/admin");
 const isHostRoute = (pathname: string) => pathname.startsWith("/host");
 
-const authPages = ["/login", "/signup"];
+// Lives in src/, next to app/: Next.js ignores a root middleware/proxy file once the
+// app directory is under src, which left every portal page unguarded.
+const authPages = ["/login", "/signup", "/forgot-password"];
 
-export function middleware(request: NextRequest) {
+// Reachable without a session, but not bounced to the dashboard with one.
+const isPublicPage = (pathname: string) => pathname.startsWith("/admin/register/");
+
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (isAdminRoute(pathname)) {
@@ -41,6 +46,7 @@ type HandleRouteArgs = {
 
 const handleRoute = ({ request, token, loginPath, dashboardPath }: HandleRouteArgs) => {
   const { pathname } = request.nextUrl;
+  if (isPublicPage(pathname)) return NextResponse.next();
   const isAuthPage = authPages.some((page) => pathname.endsWith(page));
   const isDashboard = pathname.startsWith(dashboardPath);
 

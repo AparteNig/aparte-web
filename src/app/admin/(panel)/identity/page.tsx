@@ -28,6 +28,7 @@ const waitingFor = (iso: string | null) => {
 
 type Documents = {
   documentUrl: string;
+  documentBackUrl: string | null;
   selfieUrl: string;
   expiresInSeconds: number;
   idNumber: string;
@@ -115,9 +116,15 @@ function VerificationCard({ row }: { row: IdentityVerificationRow }) {
           </Button>
         ) : (
           <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-3">
+            <div className={`grid gap-3 ${documents.documentBackUrl ? "grid-cols-3" : "grid-cols-2"}`}>
               {[
-                { label: "ID document", url: documents.documentUrl },
+                {
+                  label: documents.documentBackUrl ? "Front" : "ID document",
+                  url: documents.documentUrl,
+                },
+                ...(documents.documentBackUrl
+                  ? [{ label: "Back", url: documents.documentBackUrl }]
+                  : []),
                 { label: "Selfie", url: documents.selfieUrl },
               ].map((item) => (
                 <a
@@ -134,11 +141,17 @@ function VerificationCard({ row }: { row: IdentityVerificationRow }) {
                     className="h-40 w-full bg-white object-contain"
                   />
                   <span className="block border-t border-slate-200 px-2 py-1 text-xs text-slate-600">
-                    {item.label} — open full size
+                    {item.label} · Open full size
                   </span>
                 </a>
               ))}
             </div>
+            {!documents.documentBackUrl &&
+              (row.idType === "drivers_licence" || row.idType === "voters_card") && (
+                <p className="text-xs text-amber-700">
+                  No back photo: this was submitted before we asked for both sides.
+                </p>
+              )}
             <p className="text-xs text-slate-500">
               These links expire in {documents.expiresInSeconds} seconds. Opening them is
               recorded in the audit log.

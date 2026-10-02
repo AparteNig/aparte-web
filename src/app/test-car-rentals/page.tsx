@@ -33,7 +33,9 @@ const initialFormState = {
   withDriver: false,
 };
 
-const formatDate = (date: Date) => date.toISOString().split("T")[0];
+// Local calendar day; toISOString() shifts it back a day east of UTC.
+const formatDate = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const isDateBetween = (date: string, start: string, end: string) => {
   const target = new Date(date).getTime();
   return target >= new Date(start).getTime() && target <= new Date(end).getTime();
@@ -538,7 +540,7 @@ export default function TestCarRentalsPage() {
                           isEdge && "border-primary bg-primary text-white",
                         )}
                       >
-                        <span>{new Date(date).getDate()}</span>
+                        <span>{Number(date.slice(8, 10))}</span>
                       </button>
                     );
                   })}

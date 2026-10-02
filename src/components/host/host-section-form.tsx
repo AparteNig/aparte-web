@@ -11,6 +11,7 @@ import PhoneInput from "@/components/general/form/PhoneInput";
 import type { HostOnboardingStep, HostProfile } from "@/types/host";
 import { useUpdateHostProfileMutation } from "@/hooks/use-host-profile";
 import { cn } from "@/lib/utils";
+import { showToast } from "@/components/general/ui/CustomToast";
 
 // "place" renders the AddressPicker and contributes a googlePlaceId to the
 // payload rather than a text value of its own.
@@ -150,11 +151,16 @@ export const HostSectionForm = ({ config, profile }: HostSectionFormProps) => {
       normalized.googlePlaceId = selectedPlace.placeId;
     }
 
-    await mutateAsync({
-      section: config.apiSection,
-      data: normalized,
-    });
-    reset(values, { keepDirty: false });
+    try {
+      await mutateAsync({
+        section: config.apiSection,
+        data: normalized,
+      });
+      reset(values, { keepDirty: false });
+      showToast.success("Saved.");
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Could not save. Please try again.");
+    }
   };
 
   const isComplete =

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import SharePage, { type Fact } from "@/components/share/SharePage";
-import { getPublicVehicle, vehicleName } from "@/lib/public-content";
+import { getPublicVehicle, vehicleName, primaryPhotoUrl } from "@/lib/public-content";
 import { formatNaira, shareImageUrl, shareUrl } from "@/lib/share";
 
 type Props = { params: Promise<{ id: string }> };
@@ -27,13 +27,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = `${formatNaira(vehicle.dailyPrice)} per day${
     vehicle.withDriverAvailable ? ", with or without a driver" : ", self-drive"
   }. Rent it on Aparte.`;
-  const image = shareImageUrl("vehicle", vehicle.id);
-  const url = shareUrl("vehicle", vehicle.id);
+  const image = shareImageUrl("vehicle", vehicle.publicId);
+  const url = shareUrl("vehicle", vehicle.publicId);
 
   return {
     title: `${title} | Aparte`,
     description,
-    alternates: { canonical: `/vehicle/${vehicle.id}` },
+    alternates: { canonical: `/vehicle/${vehicle.publicId}` },
     openGraph: {
       type: "website",
       url,
@@ -57,6 +57,10 @@ export default async function VehicleSharePage({ params }: Props) {
 
   if (!vehicle) notFound();
 
+  // Links shared before opaque ids existed carry the numeric id. They keep
+  // working, but land on the opaque URL so it is the one that gets re-shared.
+  if (id !== vehicle.publicId) permanentRedirect(`/vehicle/${vehicle.publicId}`);
+
   const facts: Fact[] = [
     { label: "Seats", value: String(vehicle.seatCapacity ?? "—") },
     { label: "Transmission", value: titleCase(vehicle.transmission) },
@@ -74,10 +78,10 @@ export default async function VehicleSharePage({ params }: Props) {
       location={locationOf(vehicle)}
       priceLabel={formatNaira(vehicle.dailyPrice)}
       priceUnit="per day"
-      imageUrl={shareImageUrl("vehicle", vehicle.id)}
+      imageUrl={primaryPhotoUrl(vehicle.photos) ? shareImageUrl("vehicle", vehicle.publicId) : null}
       facts={facts}
       amenities={vehicle.features}
-      url={shareUrl("vehicle", vehicle.id)}
+      url={shareUrl("vehicle", vehicle.publicId)}
     />
   );
 }

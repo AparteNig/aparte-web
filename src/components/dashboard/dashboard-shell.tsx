@@ -20,11 +20,11 @@ export const DashboardShell = ({
   cookieName,
   headerSlot,
 }: DashboardShellProps) => (
-  <div className="flex min-h-screen bg-[#F8F9FB] text-slate-900">
+  <div className="flex min-h-screen flex-col bg-[#F8F9FB] text-slate-900 md:flex-row">
     <SidebarNav items={navItems} logoutHref={logoutHref} cookieName={cookieName} />
-    <main className="flex w-full flex-col gap-6">
+    <main className="flex w-full min-w-0 flex-col gap-6">
       {headerSlot}
-      <section className="mx-4 flex-1 rounded-3xl bg-white p-6 shadow-sm md:mx-10">
+      <section className="mx-4 flex-1 rounded-3xl bg-white p-4 shadow-sm md:mx-10 md:p-6">
         {title && (
           <div className="mb-6">
             <h1 className="text-3xl font-semibold">{title}</h1>

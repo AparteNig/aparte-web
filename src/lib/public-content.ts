@@ -16,6 +16,8 @@ export type PublicPhoto = { id: number; url: string | null; caption: string | nu
 
 export type PublicListing = {
   id: number;
+  /** Opaque id used in share links; the numeric id never leaves the app. */
+  publicId: string;
   title: string;
   summary: string | null;
   description: string | null;
@@ -37,6 +39,7 @@ export type PublicListing = {
 
 export type PublicVehicle = {
   id: number;
+  publicId: string;
   make: string | null;
   model: string | null;
   year: number | null;

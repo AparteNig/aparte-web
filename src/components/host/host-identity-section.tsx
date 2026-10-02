@@ -23,11 +23,13 @@ import {
  * shoulder-surfer or a screenshare can read.
  */
 
+// `sides` mirrors GET /hosts/identity/document-types: cards carry details on
+// both faces, so the server rejects a licence or voter's card without its back.
 const ID_TYPES = [
-  { value: "nin", label: "NIN (National Identification Number)", hint: "11 digits" },
-  { value: "passport", label: "International passport", hint: "e.g. A12345678" },
-  { value: "drivers_licence", label: "Driver's licence", hint: "9–15 characters" },
-  { value: "voters_card", label: "Voter's card (PVC)", hint: "9–25 characters" },
+  { value: "nin", label: "NIN (National Identification Number)", hint: "11 digits", sides: 1 },
+  { value: "passport", label: "International passport", hint: "e.g. A12345678", sides: 1 },
+  { value: "drivers_licence", label: "Driver's licence", hint: "9–15 characters", sides: 2 },
+  { value: "voters_card", label: "Voter's card (PVC)", hint: "9–25 characters", sides: 2 },
 ] as const;
 
 const STATUS_STYLES: Record<IdentitySummary["status"], string> = {
@@ -42,7 +44,10 @@ export default function HostIdentitySection({ hostId }: { hostId: number }) {
   const [idType, setIdType] = useState<string>("nin");
   const [idNumber, setIdNumber] = useState("");
   const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [backFile, setBackFile] = useState<File | null>(null);
   const [selfieFile, setSelfieFile] = useState<File | null>(null);
+
+  const twoSided = ID_TYPES.find((t) => t.value === idType)?.sides === 2;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,24 +66,27 @@ export default function HostIdentitySection({ hostId }: { hostId: number }) {
   }, []);
 
   const submit = async () => {
-    if (!documentFile || !selfieFile) return;
+    if (!documentFile || !selfieFile || (twoSided && !backFile)) return;
     setBusy(true);
     setError(null);
     try {
       // Upload both before submitting: a submission referencing a key that
       // failed to upload would sit in the queue as an unopenable case.
-      const [document, selfie] = await Promise.all([
+      const [document, selfie, back] = await Promise.all([
         uploadIdentityFile(documentFile, "host", hostId),
         uploadIdentityFile(selfieFile, "host", hostId),
+        twoSided && backFile ? uploadIdentityFile(backFile, "host", hostId) : null,
       ]);
       const next = await submitHostIdentity({
         idType,
         idNumber: idNumber.trim(),
         documentKey: document.key,
+        ...(back ? { documentBackKey: back.key } : {}),
         selfieKey: selfie.key,
       });
       setSummary(next);
       setDocumentFile(null);
+      setBackFile(null);
       setSelfieFile(null);
       setIdNumber("");
     } catch (e) {
@@ -91,8 +99,15 @@ export default function HostIdentitySection({ hostId }: { hostId: number }) {
   const status = summary?.status ?? "not_started";
   const canSubmit =
     (status === "not_started" || status === "rejected") &&
-    Boolean(idNumber.trim() && documentFile && selfieFile) &&
+    Boolean(idNumber.trim() && documentFile && selfieFile && (!twoSided || backFile)) &&
     !busy;
+  // Says why the button is greyed out instead of leaving the host to guess.
+  const missing = [
+    !idNumber.trim() && "document number",
+    !documentFile && (twoSided ? "front of the card" : "photo of the document"),
+    twoSided && !backFile && "back of the card",
+    !selfieFile && "selfie",
+  ].filter(Boolean) as string[];
 
   return (
     <div className="space-y-5">
@@ -133,7 +148,11 @@ export default function HostIdentitySection({ hostId }: { hostId: number }) {
             <select
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
               value={idType}
-              onChange={(e) => setIdType(e.target.value)}
+              onChange={(e) => {
+                setIdType(e.target.value);
+                // A back photo picked for a card means nothing for a passport.
+                setBackFile(null);
+              }}
             >
               {ID_TYPES.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -154,11 +173,21 @@ export default function HostIdentitySection({ hostId }: { hostId: number }) {
 
           {[
             {
-              label: "Photo of the document",
+              label: twoSided ? "Front of the card" : "Photo of the document",
               help: "All four corners visible, and the number readable.",
               file: documentFile,
               set: setDocumentFile,
             },
+            ...(twoSided
+              ? [
+                  {
+                    label: "Back of the card",
+                    help: "Turn the card over. All four corners visible.",
+                    file: backFile,
+                    set: setBackFile,
+                  },
+                ]
+              : []),
             {
               label: "Selfie holding the document",
               help: "Your face and the document in the same photo.",
@@ -182,6 +211,10 @@ export default function HostIdentitySection({ hostId }: { hostId: number }) {
           ))}
 
           {error && <p className="text-sm text-rose-600">{error}</p>}
+
+          {!canSubmit && !busy && missing.length > 0 && (
+            <p className="text-xs text-slate-500">Still needed: {missing.join(", ")}.</p>
+          )}
 
           <Button type="primary" onClick={submit} disabled={!canSubmit}>
             {busy ? "Submitting…" : "Submit for verification"}

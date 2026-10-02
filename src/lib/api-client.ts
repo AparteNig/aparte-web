@@ -82,7 +82,9 @@ export const apiFetch = async <T>(path: string, options: ApiFetchOptions = {}): 
       const cookieName = authCookie === "admin" ? ADMIN_AUTH_COOKIE : HOST_AUTH_COOKIE;
       clearAuthCookie(cookieName);
       if (authCookie === "admin") {
-        if (!window.location.pathname.startsWith("/admin")) {
+        // Only the pages that work without a session stay put; anywhere else
+        // in the panel a 401 used to leave an empty dashboard on screen.
+        if (!/^\/admin\/(login|signup|register)/.test(window.location.pathname)) {
           window.location.href = "/admin/login";
         }
       } else if (!window.location.pathname.startsWith("/host/login")) {
@@ -272,6 +274,18 @@ export const uploadHostAvatar = (file: File) => {
     body: formData,
   });
 };
+
+export type PaystackBank = { id: number; name: string; code: string };
+
+export const getPaymentBanks = () =>
+  apiFetch<{ banks: PaystackBank[] }>("/payments/banks", { method: "GET", auth: false });
+
+/** Resolves the registered account name so a host sees who they are paying. */
+export const verifyBankAccount = (payload: { bankCode: string; accountNumber: string }) =>
+  apiFetch<{ bankCode: string; accountNumber: string; accountName: string }>(
+    "/payments/verify-bank",
+    { method: "POST", auth: false, body: JSON.stringify(payload) },
+  );
 
 export const uploadListingAsset = (listingId: number, file: File) => {
   const formData = new FormData();
@@ -1013,6 +1027,8 @@ export const getPendingIdentityVerifications = () =>
 export const getIdentityDocuments = (verificationId: number) =>
   adminQuery<{
     documentUrl: string;
+    /** Null for one-sided documents and for submissions from before the back was required. */
+    documentBackUrl: string | null;
     selfieUrl: string;
     expiresInSeconds: number;
     idType: string;
@@ -1060,6 +1076,8 @@ export const submitHostIdentity = (payload: {
   idType: string;
   idNumber: string;
   documentKey: string;
+  /** Required by the server for two-sided cards (driver's licence, voter's card). */
+  documentBackKey?: string;
   selfieKey: string;
 }) =>
   apiFetch<IdentitySummary>("/hosts/identity", {
